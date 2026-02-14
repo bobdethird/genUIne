@@ -37,6 +37,8 @@ import { code } from "@streamdown/code";
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useLocalChat } from "@/lib/hooks/use-local-chat";
 import { MessageSquare, Plus, History } from "lucide-react";
+import { PromptPill } from "@/components/prompt-pill";
+import { generateGistTitle } from "@/lib/gist-title";
 
 // =============================================================================
 // Types
@@ -50,6 +52,20 @@ type AppMessage = UIMessage<unknown, AppDataParts>;
 // =============================================================================
 
 const transport = new DefaultChatTransport({ api: "/api/chat" });
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+function extractPromptFromMessage(m: AppMessage): string {
+  const msg = m as { content?: string; parts?: Array<{ type?: string; text?: string }> };
+  if (typeof msg.content === "string") return msg.content;
+  if (Array.isArray(msg.parts)) {
+    const textPart = msg.parts.find((p) => p.type === "text");
+    if (textPart && typeof textPart.text === "string") return textPart.text;
+  }
+  return "";
+}
 
 // =============================================================================
 // Suggestions (shown in empty state)
@@ -167,6 +183,28 @@ function ToolCallDisplay({
 }
 
 // =============================================================================
+// Output Block (assistant content + prompt pill header)
+// =============================================================================
+
+function OutputBlock({
+  rawPrompt,
+  children,
+}: {
+  rawPrompt: string;
+  children: React.ReactNode;
+}) {
+  const gistTitle = generateGistTitle(rawPrompt);
+  return (
+    <div className="w-full flex flex-col">
+      <div className="sticky top-0 z-10 shrink-0 py-2 mb-2 bg-gradient-to-b from-background via-background/95 to-transparent">
+        <PromptPill gistTitle={gistTitle} rawPrompt={rawPrompt || undefined} />
+      </div>
+      <div className="min-h-0 flex-1">{children}</div>
+    </div>
+  );
+}
+
+// =============================================================================
 // Message Bubble
 // =============================================================================
 
@@ -260,17 +298,8 @@ function MessageBubble({
   const showLoader =
     isLast && isStreaming && message.role === "assistant" && !hasAnything;
 
-  if (isUser) {
-    return (
-      <div className="flex justify-end">
-        {text && (
-          <div className="max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap bg-primary text-primary-foreground rounded-tr-md">
-            {text}
-          </div>
-        )}
-      </div>
-    );
-  }
+  // User prompts are not shown as bubbles; the prompt pill on the assistant block serves as the label
+  if (isUser) return null;
 
   // If there's a spec but no spec segment was inserted (edge case),
   // append it so it still renders.
@@ -756,29 +785,31 @@ export default function ChatPage() {
                 const userMsg = messages[userIdx];
                 const assistantMsg = messages[userIdx + 1];
                 const isLastExchange = userIdx === exchangeIndices[exchangeIndices.length - 1];
+                const rawPrompt = extractPromptFromMessage(userMsg);
                 return (
                   <div
                     key={userIdx}
                     id={`exchange-${userIdx}`}
                     className="space-y-4"
                   >
-                    <MessageBubble
-                      message={userMsg}
-                      isLast={false}
-                      isStreaming={false}
-                    />
                     {assistantMsg && assistantMsg.role === "assistant" ? (
                       <div
                         id={`exchange-${userIdx}-start`}
                         className="scroll-mt-4"
                       >
-                        <MessageBubble
-                          message={assistantMsg}
-                          isLast={isLastExchange && !isStreaming}
-                          isStreaming={isLastExchange && isStreaming}
-                        />
+                        <OutputBlock rawPrompt={rawPrompt}>
+                          <MessageBubble
+                            message={assistantMsg}
+                            isLast={isLastExchange && !isStreaming}
+                            isStreaming={isLastExchange && isStreaming}
+                          />
+                        </OutputBlock>
                       </div>
-                    ) : null}
+                    ) : (
+                      <OutputBlock rawPrompt={rawPrompt}>
+                        <div className="text-sm text-muted-foreground animate-shimmer">Thinking...</div>
+                      </OutputBlock>
+                    )}
                   </div>
                 );
               })}
@@ -812,14 +843,31 @@ export default function ChatPage() {
                 </div>
               )}
 
-              {displayedMessages.map((message, index) => (
-                <MessageBubble
-                  key={message.id}
-                  message={message}
-                  isLast={index === displayedMessages.length - 1}
-                  isStreaming={isStreaming && viewedIndex === null && index === displayedMessages.length - 1}
-                />
-              ))}
+              {displayedMessages.map((message, index) => {
+                if (message.role === "user") {
+                  const isLast = index === displayedMessages.length - 1;
+                  if (!isLast) return null;
+                  const rawPrompt = extractPromptFromMessage(message);
+                  return (
+                    <OutputBlock key={message.id} rawPrompt={rawPrompt}>
+                      <div className="text-sm text-muted-foreground animate-shimmer">Thinking...</div>
+                    </OutputBlock>
+                  );
+                }
+                const userMsg = displayedMessages[index - 1];
+                const rawPrompt = userMsg && userMsg.role === "user"
+                  ? extractPromptFromMessage(userMsg)
+                  : "";
+                return (
+                  <OutputBlock key={message.id} rawPrompt={rawPrompt}>
+                    <MessageBubble
+                      message={message}
+                      isLast={index === displayedMessages.length - 1}
+                      isStreaming={isStreaming && viewedIndex === null && index === displayedMessages.length - 1}
+                    />
+                  </OutputBlock>
+                );
+              })}
 
               {error && (
                 <Alert variant="destructive">
