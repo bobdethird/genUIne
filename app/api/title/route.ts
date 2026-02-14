@@ -1,7 +1,7 @@
 import { generateText } from "ai";
 import { gateway } from "@ai-sdk/gateway";
 
-const MODEL = process.env.AI_GATEWAY_MODEL || "anthropic/claude-haiku-4.5";
+const MODEL = process.env.AI_GATEWAY_TITLE_MODEL || "openai/gpt-5-nano";
 
 const TITLE_SYSTEM = `Generate a clean, short topic title for a user prompt.
 
@@ -31,7 +31,6 @@ export async function POST(req: Request) {
       model: gateway(MODEL),
       system: TITLE_SYSTEM,
       prompt: `User prompt:\n"${prompt}"\n\nTitle:`,
-      maxTokens: 50,
       temperature: 0.2,
     });
 

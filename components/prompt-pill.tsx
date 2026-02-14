@@ -15,7 +15,7 @@ export function PromptPill({ gistTitle, rawPrompt }: PromptPillProps) {
   return (
     <div
       className={cn(
-        "w-full rounded-full border border-border/40 bg-background/40 backdrop-blur-sm text-left transition-all duration-300 ease-in-out overflow-hidden cursor-default",
+        "w-full rounded-3xl border border-border bg-background/40 backdrop-blur-sm text-left transition-all duration-300 ease-in-out overflow-hidden cursor-default",
         hasExpandablePrompt && "hover:bg-background/50"
       )}
       onMouseEnter={() => hasExpandablePrompt && setExpanded(true)}

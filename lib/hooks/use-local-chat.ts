@@ -66,42 +66,6 @@ export function useLocalChat() {
             setChats((prev) =>
                 prev.map((chat) => {
                     if (chat.id === chatId) {
-                        // Generate a title if it's "New Chat" and we have a user message
-                        let title = chat.title;
-                        if (chat.title === "New Chat" && messages.length > 0) {
-                            const firstUserMsg = messages.find((m) => m.role === "user");
-                            if (firstUserMsg) {
-                                // Cast to any to access content safely if type definition is strict
-                                const content = (firstUserMsg as any).content;
-                                let title = "";
-
-                                if (typeof content === 'string') {
-                                    title = content;
-                                } else if (Array.isArray((firstUserMsg as any).parts)) {
-                                    const parts = (firstUserMsg as any).parts;
-                                    const textPart = parts.find((p: any) => p.type === 'text');
-                                    if (textPart) {
-                                        title = textPart.text;
-                                    }
-                                }
-
-                                if (title) {
-                                    // Truncate cleanly
-                                    //@ts-ignore
-                                    title = title.slice(0, 40);
-                                }
-
-                                if (title) {
-                                    // Updating the title only if we found valid text
-                                    return {
-                                        ...chat,
-                                        messages,
-                                        title,
-                                        updatedAt: Date.now(),
-                                    };
-                                }
-                            }
-                        }
                         return {
                             ...chat,
                             messages,
@@ -115,6 +79,17 @@ export function useLocalChat() {
         []
     );
 
+    const updateChatTitle = useCallback(
+        (chatId: string, title: string) => {
+            setChats((prev) =>
+                prev.map((chat) =>
+                    chat.id === chatId ? { ...chat, title } : chat
+                )
+            );
+        },
+        []
+    );
+
     return {
         chats,
         currentChatId,
@@ -123,6 +98,7 @@ export function useLocalChat() {
         selectChat,
         deleteChat,
         saveMessages,
+        updateChatTitle,
         isLoaded,
         currentChat: chats.find((c) => c.id === currentChatId) || null,
     };
