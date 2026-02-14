@@ -210,14 +210,16 @@ function MessageBubble({
     }
   }
 
-  // Find the last text segment index — only this one is "active".
-  // Earlier text segments have already been superseded by a new step.
-  const lastTextIdx = (() => {
-    for (let i = segments.length - 1; i >= 0; i--) {
-      if (segments[i].kind === "text") return i;
-    }
-    return -1;
-  })();
+  // Assign a step number to each segment. A new step starts with each text
+  // segment; tools inherit the step of their preceding text. Spec segments
+  // are excluded (always shown). This lets text + its tool calls fade as one unit.
+  const stepOf: number[] = [];
+  let step = -1;
+  for (let i = 0; i < segments.length; i++) {
+    if (segments[i].kind === "text") step++;
+    stepOf[i] = segments[i].kind === "spec" ? -1 : Math.max(0, step);
+  }
+  const lastStep = Math.max(0, step);
 
   const hasAnything = segments.length > 0 || hasSpec;
   const showLoader =
@@ -243,13 +245,13 @@ function MessageBubble({
   return (
     <div className="w-full flex flex-col gap-3">
       {segments.map((seg, i) => {
-        if (seg.kind === "text") {
-          // Only the last text segment is the "active" step.
-          // Earlier text → already superseded → fade out.
-          // Last text when spec is present → also fade out (UI replaces it).
-          const isActive = i === lastTextIdx && !hasSpec;
-          const isFading = i !== lastTextIdx || hasSpec;
+        // For non-spec segments, determine if this step is active or fading.
+        // A step fades when a newer step exists, or when the spec has appeared.
+        const isActiveStep =
+          seg.kind !== "spec" && stepOf[i] === lastStep && !hasSpec;
+        const isFading = seg.kind !== "spec" && !isActiveStep;
 
+        if (seg.kind === "text") {
           return (
             <div
               key={`text-${i}`}
@@ -259,7 +261,7 @@ function MessageBubble({
             >
               <Streamdown
                 plugins={{ code }}
-                animated={isLast && isStreaming && isActive}
+                animated={isLast && isStreaming && isActiveStep}
               >
                 {seg.text}
               </Streamdown>
@@ -277,7 +279,7 @@ function MessageBubble({
         return (
           <div
             key={`tools-${i}`}
-            className={`flex flex-col gap-1 ${hasSpec ? "animate-fade-out-collapse" : ""}`}
+            className={`flex flex-col gap-1 ${isFading ? "animate-fade-out-collapse" : ""}`}
           >
             {seg.tools.map((t) => (
               <ToolCallDisplay
