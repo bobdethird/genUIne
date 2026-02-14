@@ -580,9 +580,8 @@ export default function ChatPage() {
                       <SidebarMenuButton
                         isActive={currentChatId === chat.id}
                         onClick={() => selectChat(chat.id)}
-                        className="truncate"
                       >
-                        {chat.title || "Untitled"}
+                        <span className="truncate">{chat.title || "Untitled"}</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
@@ -602,9 +601,9 @@ export default function ChatPage() {
             {/* Sidebar trigger — top-left, no overlay; main content stays in focus */}
             <div className="absolute top-4 left-4 z-20">
               <SidebarTrigger
-                variant="outline"
+                variant="ghost"
                 size="icon"
-                className="h-10 w-10 rounded-full shadow-md bg-background"
+                className="h-10 w-10 rounded-full"
                 title="Toggle sidebar"
               />
             </div>
