@@ -687,7 +687,7 @@ export default function ChatPage() {
             </div>
           ) : (
             /* Message thread - Focus Mode */
-            <div className="max-w-4xl mx-auto px-10 py-6 pb-24 space-y-6">
+            <div className="max-w-6xl mx-auto px-10 py-6 pb-24 space-y-6">
               {viewedIndex !== null && (
                 <div className="flex justify-center mb-4">
                   <Button
@@ -743,7 +743,7 @@ export default function ChatPage() {
           )}
           <div
             className="mx-auto relative pointer-events-auto transition-all duration-300 ease-in-out"
-            style={{ maxWidth: inputExpanded ? "32rem" : "12rem" }}
+            style={{ maxWidth: inputExpanded ? "48rem" : "12rem" }}
             onMouseEnter={() => setInputHovered(true)}
             onMouseLeave={() => setInputHovered(false)}
           >
