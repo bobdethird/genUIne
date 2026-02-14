@@ -21,7 +21,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  ArrowDown,
   ArrowUp,
   ChevronRight,
   Code2,
@@ -34,9 +33,22 @@ import {
 } from "lucide-react";
 import { Streamdown } from "streamdown";
 import { code } from "@streamdown/code";
-import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
 import { useLocalChat } from "@/lib/hooks/use-local-chat";
-import { MessageSquare, Plus, History } from "lucide-react";
+import { MessageSquare, Plus } from "lucide-react";
 import { PromptPill } from "@/components/prompt-pill";
 import { generateGistTitle } from "@/lib/gist-title";
 
@@ -381,9 +393,7 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLElement>(null);
-  const [showScrollButton, setShowScrollButton] = useState(false);
-  const isStickToBottom = useRef(true);
-  const isAutoScrolling = useRef(false);
+  
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [inputHovered, setInputHovered] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
@@ -554,51 +564,7 @@ export default function ChatPage() {
   }, [previewMode, viewedIndex, scrollToExchangeAnchor]);
 
 
-  // Track whether the user has scrolled away from the bottom.
-  // During programmatic scrolling, suppress button updates until we arrive.
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    const THRESHOLD = 80;
-    const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = container;
-      const atBottom = scrollTop + clientHeight >= scrollHeight - THRESHOLD;
-
-      if (isAutoScrolling.current) {
-        // Wait for the programmatic scroll to reach the bottom before
-        // handing control back to the user-scroll tracker.
-        if (atBottom) {
-          isAutoScrolling.current = false;
-        }
-        return;
-      }
-
-      isStickToBottom.current = atBottom;
-      setShowScrollButton(!atBottom);
-    };
-    container.addEventListener("scroll", handleScroll, { passive: true });
-    return () => container.removeEventListener("scroll", handleScroll);
-  }, []);
-
-  // Auto-scroll to bottom on new messages
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container || !isStickToBottom.current) return;
-    isAutoScrolling.current = true;
-    container.scrollTop = container.scrollHeight;
-    requestAnimationFrame(() => {
-      isAutoScrolling.current = false;
-    });
-  }, [messages, displayedMessages, isStreaming]);
-
-  const scrollToBottom = useCallback(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    isStickToBottom.current = true;
-    setShowScrollButton(false);
-    isAutoScrolling.current = true;
-    container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
-  }, []);
+  
 
   const handleSubmit = useCallback(
     async (text?: string) => {
@@ -636,6 +602,17 @@ export default function ChatPage() {
   const isEmpty = messages.length === 0;
   const inputExpanded = inputHovered || input.length > 0 || isEmpty;
 
+  // Auto-resize textarea height based on content
+  useEffect(() => {
+    const textarea = inputRef.current;
+    if (textarea && inputExpanded) {
+      textarea.style.height = "auto";
+      const scrollH = textarea.scrollHeight;
+      // min 48px (matches pill), max 200px
+      textarea.style.height = `${Math.min(Math.max(scrollH, 48), 200)}px`;
+    }
+  }, [input, inputExpanded]);
+
   // Auto-focus textarea when pill expands
   useEffect(() => {
     if (inputExpanded) {
@@ -645,44 +622,51 @@ export default function ChatPage() {
 
   return (
     <TooltipProvider>
-      <div className="h-screen flex flex-col overflow-hidden relative">
-        {/* Header */}
-        <header className="border-b px-6 py-3 flex items-center justify-between flex-shrink-0 z-20 bg-background/80 backdrop-blur-sm">
-          <div className="flex items-center gap-3">
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" title="Past Chats">
-                  <History className="h-5 w-5" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="left">
-                <SheetHeader>
-                  <SheetTitle>Past Chats</SheetTitle>
-                </SheetHeader>
-                <div className="flex flex-col gap-1 mt-4 overflow-y-auto max-h-[calc(100vh-100px)]">
+      <SidebarProvider defaultOpen={false}>
+        <Sidebar collapsible="offcanvas" side="left">
+          <SidebarHeader />
+          <SidebarContent>
+            <SidebarGroup>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton onClick={handleAddChat} className="gap-2">
+                      <Plus className="h-4 w-4" />
+                      New Chat
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                   {chats.map(chat => (
-                    <Button
-                      key={chat.id}
-                      variant={currentChatId === chat.id ? "secondary" : "ghost"}
-                      className="justify-start text-left truncate"
-                      onClick={() => selectChat(chat.id)}
-                    >
-                      {chat.title || "New Chat"}
-                    </Button>
+                    <SidebarMenuItem key={chat.id}>
+                      <SidebarMenuButton
+                        isActive={currentChatId === chat.id}
+                        onClick={() => selectChat(chat.id)}
+                      >
+                        <span className="truncate">{chat.title || "Untitled"}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
                   ))}
-                  {chats.length === 0 && <div className="text-sm text-muted-foreground p-4">No past chats</div>}
-                </div>
-              </SheetContent>
-            </Sheet>
-            <h1 className="text-lg font-semibold">ChatGPT V2</h1>
-            <Button variant="ghost" size="icon-sm" onClick={handleAddChat} title="New Chat">
-              <Plus className="h-5 w-5" />
-            </Button>
-          </div>
-          <div className="flex items-center gap-2">
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+            {chats.length === 0 && (
+              <div className="px-2 py-3 text-sm text-muted-foreground">No past chats</div>
+            )}
+          </SidebarContent>
+          <SidebarFooter>
             <ThemeToggle />
-          </div>
-        </header>
+          </SidebarFooter>
+        </Sidebar>
+        <SidebarInset>
+          <div className="h-screen flex flex-col overflow-hidden relative">
+            {/* Sidebar trigger — top-left, no overlay; main content stays in focus */}
+            <div className="absolute top-4 left-4 z-20">
+              <SidebarTrigger
+                variant="ghost"
+                size="icon"
+                className="h-10 w-10 rounded-full"
+                title="Toggle sidebar"
+              />
+            </div>
 
         {/* Current Conversation History Bubble — hover to enter preview: one long document, scroll to exchange */}
         {!isEmpty && (
@@ -883,25 +867,10 @@ export default function ChatPage() {
 
         {/* Input bar - overlays bottom of chat area */}
         <div className="absolute bottom-0 left-0 right-0 px-6 pb-10 pt-10 bg-gradient-to-t from-background/60 to-transparent pointer-events-none z-10">
-          {/* Scroll to bottom button */}
-          {showScrollButton && !isEmpty && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  className="absolute left-1/2 -translate-x-1/2 -top-10 z-10 shadow-md pointer-events-auto"
-                  onClick={scrollToBottom}
-                >
-                  <ArrowDown className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Scroll to bottom</TooltipContent>
-            </Tooltip>
-          )}
+          
           <div
             className="mx-auto relative pointer-events-auto transition-all duration-300 ease-in-out"
-            style={{ maxWidth: inputExpanded ? "48rem" : "12rem" }}
+            style={{ maxWidth: inputExpanded ? "32rem" : "12rem" }}
             onMouseEnter={() => setInputHovered(true)}
             onMouseLeave={() => setInputHovered(false)}
           >
@@ -917,20 +886,22 @@ export default function ChatPage() {
                   ? "e.g., Compare weather in NYC, London, and Tokyo..."
                   : "Ask a follow-up..."
               }
-              rows={inputExpanded ? 2 : 1}
+              rows={1}
               className={[
                 "resize-none bg-card shadow-sm focus-visible:ring-0 focus-visible:border-input min-h-0 transition-all duration-300 ease-in-out",
                 inputExpanded ? "cursor-text" : "cursor-default caret-transparent",
                 inputExpanded ? "text-lg" : "text-sm",
               ].join(" ")}
               style={{
-                height: inputExpanded ? "82px" : "48px",
-                overflow: inputExpanded ? undefined : "hidden",
+                height: inputExpanded ? undefined : "48px",
+                minHeight: inputExpanded ? "48px" : undefined,
+                maxHeight: inputExpanded ? "200px" : undefined,
+                overflow: inputExpanded ? "auto" : "hidden",
                 borderRadius: inputExpanded ? "1rem" : "9999px",
                 paddingLeft: inputExpanded ? "1rem" : "2.5rem",
                 paddingRight: inputExpanded ? "3rem" : "1.5rem",
-                paddingTop: inputExpanded ? "13px" : "12px",
-                paddingBottom: inputExpanded ? "13px" : "12px",
+                paddingTop: "12px",
+                paddingBottom: "12px",
               }}
               autoFocus
             />
@@ -960,7 +931,9 @@ export default function ChatPage() {
             </div>
           </div>
         </div>
-      </div>
+          </div>
+        </SidebarInset>
+      </SidebarProvider>
     </TooltipProvider>
   );
 }
