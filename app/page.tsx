@@ -235,20 +235,8 @@ function MessageBubble({
     <div className="w-full flex flex-col gap-3">
       {segments.map((seg, i) => {
         if (seg.kind === "text") {
-          const isLastSegment = i === segments.length - 1;
-          return (
-            <div
-              key={`text-${i}`}
-              className="text-sm leading-relaxed [&_p+p]:mt-3 [&_ul]:mt-2 [&_ol]:mt-2 [&_pre]:mt-2"
-            >
-              <Streamdown
-                plugins={{ code }}
-                animated={isLast && isStreaming && isLastSegment}
-              >
-                {seg.text}
-              </Streamdown>
-            </div>
-          );
+          // Never render raw text — the spec UI already shows all data.
+          return null;
         }
         if (seg.kind === "spec") {
           if (!hasSpec) return null;
@@ -259,7 +247,10 @@ function MessageBubble({
           );
         }
         return (
-          <div key={`tools-${i}`} className="flex flex-col gap-1">
+          <div
+            key={`tools-${i}`}
+            className={`flex flex-col gap-1 ${hasSpec ? "animate-fade-out-collapse" : ""}`}
+          >
             {seg.tools.map((t) => (
               <ToolCallDisplay
                 key={t.toolCallId}
