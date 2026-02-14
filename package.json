@@ -29,6 +29,7 @@
     "react-dom": "19.2.3",
     "react-three": "^0.9.7",
     "recharts": "2.15.4",
+    "sonner": "^2.0.7",
     "streamdown": "^2.2.0",
     "tailwind-merge": "^3.4.0",
     "three": "^0.182.0",

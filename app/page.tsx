@@ -11,12 +11,22 @@ import {
 import { useJsonRenderMessage } from "@json-render/react";
 import { ExplorerRenderer } from "@/lib/render/renderer";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   ArrowDown,
   ArrowUp,
   ChevronRight,
   Loader2,
   Sparkles,
+  AlertCircle,
 } from "lucide-react";
 import { Streamdown } from "streamdown";
 import { code } from "@streamdown/code";
@@ -91,9 +101,10 @@ function ToolCallDisplay({
 
   return (
     <div className="text-sm group">
-      <button
-        type="button"
-        className="flex items-center gap-1.5"
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-auto px-0 py-0 gap-1.5 font-normal hover:bg-transparent"
         onClick={() => setExpanded((e) => !e)}
       >
         <span
@@ -106,7 +117,7 @@ function ToolCallDisplay({
             className={`h-3 w-3 text-muted-foreground/0 group-hover:text-muted-foreground transition-all ${expanded ? "rotate-90" : ""}`}
           />
         )}
-      </button>
+      </Button>
       {expanded && !isLoading && result != null && (
         <div className="mt-1 max-h-64 overflow-auto">
           <pre className="text-xs text-muted-foreground whitespace-pre-wrap break-all">
@@ -374,20 +385,18 @@ export default function ChatPage() {
   const isEmpty = messages.length === 0;
 
   return (
+    <TooltipProvider>
     <div className="h-screen flex flex-col overflow-hidden">
       {/* Header */}
       <header className="border-b px-6 py-3 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
-          <h1 className="text-lg font-semibold">json-render Chat Example</h1>
+          <h1 className="text-lg font-semibold">ChatGPT V2</h1>
         </div>
         <div className="flex items-center gap-2">
           {messages.length > 0 && (
-            <button
-              onClick={handleClear}
-              className="px-3 py-1.5 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            >
+            <Button variant="ghost" size="sm" onClick={handleClear}>
               Start Over
-            </button>
+            </Button>
           )}
           <ThemeToggle />
         </div>
@@ -412,14 +421,16 @@ export default function ChatPage() {
               {/* Suggestions */}
               <div className="flex flex-wrap gap-2 justify-center">
                 {SUGGESTIONS.map((s) => (
-                  <button
+                  <Button
                     key={s.label}
+                    variant="outline"
+                    size="sm"
+                    className="text-muted-foreground"
                     onClick={() => handleSubmit(s.prompt)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                   >
                     <Sparkles className="h-3 w-3" />
                     {s.label}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -438,9 +449,10 @@ export default function ChatPage() {
 
             {/* Error display */}
             {error && (
-              <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                {error.message}
-              </div>
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error.message}</AlertDescription>
+              </Alert>
             )}
 
             <div ref={messagesEndRef} />
@@ -452,16 +464,22 @@ export default function ChatPage() {
       <div className="px-6 pb-3 flex-shrink-0 bg-background relative">
         {/* Scroll to bottom button */}
         {showScrollButton && !isEmpty && (
-          <button
-            onClick={scrollToBottom}
-            className="absolute left-1/2 -translate-x-1/2 -top-10 z-10 h-8 w-8 rounded-full border border-border bg-background text-muted-foreground shadow-md flex items-center justify-center hover:text-foreground hover:bg-accent transition-colors"
-            aria-label="Scroll to bottom"
-          >
-            <ArrowDown className="h-4 w-4" />
-          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon-sm"
+                className="absolute left-1/2 -translate-x-1/2 -top-10 z-10 shadow-md"
+                onClick={scrollToBottom}
+              >
+                <ArrowDown className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Scroll to bottom</TooltipContent>
+          </Tooltip>
         )}
         <div className="max-w-4xl mx-auto relative">
-          <textarea
+          <Textarea
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -472,22 +490,29 @@ export default function ChatPage() {
                 : "Ask a follow-up..."
             }
             rows={2}
-            className="w-full resize-none rounded-xl border border-input bg-card px-4 py-3 pr-12 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className="resize-none rounded-xl bg-card px-4 py-3 pr-12 min-h-0 shadow-sm"
             autoFocus
           />
-          <button
-            onClick={() => handleSubmit()}
-            disabled={!input.trim() || isStreaming}
-            className="absolute right-3 bottom-3 h-8 w-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {isStreaming ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <ArrowUp className="h-4 w-4" />
-            )}
-          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="icon-sm"
+                className="absolute right-2 top-1/2 -translate-y-1/2"
+                onClick={() => handleSubmit()}
+                disabled={!input.trim() || isStreaming}
+              >
+                {isStreaming ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ArrowUp className="h-4 w-4" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Send message</TooltipContent>
+          </Tooltip>
         </div>
       </div>
     </div>
+    </TooltipProvider>
   );
 }
