@@ -386,7 +386,7 @@ export default function ChatPage() {
 
   return (
     <TooltipProvider>
-    <div className="h-screen flex flex-col overflow-hidden">
+    <div className="h-screen flex flex-col overflow-hidden relative">
       {/* Header */}
       <header className="border-b px-6 py-3 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
@@ -406,7 +406,7 @@ export default function ChatPage() {
       <main ref={scrollContainerRef} className="flex-1 overflow-auto">
         {isEmpty ? (
           /* Empty state */
-          <div className="h-full flex flex-col items-center justify-center px-6 py-12">
+          <div className="h-full flex flex-col items-center justify-center px-6 py-0">
             <div className="max-w-2xl w-full space-y-8">
               <div className="text-center space-y-2">
                 <h2 className="text-2xl font-semibold tracking-tight">
@@ -437,7 +437,7 @@ export default function ChatPage() {
           </div>
         ) : (
           /* Message thread */
-          <div className="max-w-4xl mx-auto px-10 py-6 space-y-6">
+          <div className="max-w-4xl mx-auto px-10 py-6 pb-24 space-y-6">
             {messages.map((message, index) => (
               <MessageBubble
                 key={message.id}
@@ -460,8 +460,8 @@ export default function ChatPage() {
         )}
       </main>
 
-      {/* Input bar - always visible at bottom */}
-      <div className="px-6 pb-3 flex-shrink-0 bg-background relative">
+      {/* Input bar - overlays bottom of chat area */}
+      <div className="absolute bottom-0 left-0 right-0 px-6 pb-3 pt-8 bg-gradient-to-t from-background/60 to-transparent pointer-events-none z-10">
         {/* Scroll to bottom button */}
         {showScrollButton && !isEmpty && (
           <Tooltip>
@@ -469,7 +469,7 @@ export default function ChatPage() {
               <Button
                 variant="outline"
                 size="icon-sm"
-                className="absolute left-1/2 -translate-x-1/2 -top-10 z-10 shadow-md"
+                className="absolute left-1/2 -translate-x-1/2 -top-10 z-10 shadow-md pointer-events-auto"
                 onClick={scrollToBottom}
               >
                 <ArrowDown className="h-4 w-4" />
@@ -478,7 +478,7 @@ export default function ChatPage() {
             <TooltipContent>Scroll to bottom</TooltipContent>
           </Tooltip>
         )}
-        <div className="max-w-4xl mx-auto relative">
+        <div className="max-w-xl mx-auto relative pointer-events-auto">
           <Textarea
             ref={inputRef}
             value={input}
@@ -490,14 +490,14 @@ export default function ChatPage() {
                 : "Ask a follow-up..."
             }
             rows={2}
-            className="resize-none rounded-xl bg-card px-4 py-3 pr-12 min-h-0 shadow-sm"
+            className="resize-none rounded-2xl bg-card px-4 py-[13px] pr-12 min-h-0 shadow-sm focus-visible:ring-0 focus-visible:border-input"
             autoFocus
           />
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 size="icon-sm"
-                className="absolute right-2 top-1/2 -translate-y-1/2"
+                className="absolute right-2 bottom-2"
                 onClick={() => handleSubmit()}
                 disabled={!input.trim() || isStreaming}
               >
