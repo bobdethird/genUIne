@@ -1,18 +1,18 @@
-import { tool, generateText } from "ai";
-import { gateway } from "@ai-sdk/gateway";
+import { tool } from "ai";
 import { z } from "zod";
+import Exa from "exa-js";
+
+const exa = new Exa(process.env.EXA_API_KEY);
 
 /**
- * Web search tool using Perplexity Sonar via AI Gateway.
+ * Web search tool using Exa AI.
  *
- * Perplexity Sonar models have built-in internet access and return
- * synthesized answers with citations. This is wrapped as a regular tool
- * (with an `execute` function) so that ToolLoopAgent can loop: it calls
- * the model, gets results, and feeds them back for the next step.
+ * Returns structured search results with text content, highlights,
+ * favicons, and images for each result — enabling rich UI rendering.
  */
 export const webSearch = tool({
   description:
-    "Search the web for current information on any topic. Use this when the user asks about something not covered by the specialized tools (weather, crypto, GitHub, Hacker News). Returns a synthesized answer based on real-time web data.",
+    "Search the web for current information on any topic. Use this when the user asks about something not covered by the specialized tools (weather, crypto, GitHub, Hacker News). Returns structured search results with text, images, and favicons.",
   inputSchema: z.object({
     query: z
       .string()
@@ -22,11 +22,31 @@ export const webSearch = tool({
   }),
   execute: async ({ query }) => {
     try {
-      const { text } = await generateText({
-        model: gateway("perplexity/sonar"),
-        prompt: query,
+      const response = await exa.search(query, {
+        type: "auto",
+        numResults: 5,
+        contents: {
+          text: { maxCharacters: 3000 },
+          highlights: { maxCharacters: 500 },
+          extras: {
+            imageLinks: 1,
+          },
+        },
       });
-      return { content: text };
+
+      const results = (response.results ?? []).map((r) => ({
+        title: r.title ?? "",
+        url: r.url ?? "",
+        favicon: r.favicon ?? null,
+        image: r.image ?? null,
+        imageLinks: r.extras?.imageLinks ?? [],
+        publishedDate: r.publishedDate ?? null,
+        author: r.author ?? null,
+        text: r.text ?? "",
+        highlights: r.highlights ?? [],
+      }));
+
+      return { results };
     } catch (error) {
       return {
         error: `Search failed: ${error instanceof Error ? error.message : "Unknown error"}`,
