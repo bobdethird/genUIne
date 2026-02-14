@@ -222,18 +222,28 @@ export const explorerCatalog = defineCatalog(schema, {
         data: z.array(z.record(z.string(), z.unknown())),
         xKey: z.string(),
         yKey: z.string(),
+        yKeys: z
+          .array(
+            z.object({
+              key: z.string(),
+              label: z.string().nullable(),
+              color: z.string().nullable(),
+            }),
+          )
+          .nullable(),
         aggregate: z.enum(["sum", "count", "avg"]).nullable(),
         color: z.string().nullable(),
         height: z.number().nullable(),
       }),
       description:
-        'Line chart visualization. Use { "$state": "/path" } to bind read-only data. xKey is the x-axis field, yKey is the numeric value field.',
+        'Line chart visualization. Use { "$state": "/path" } to bind read-only data. xKey is the x-axis field, yKey is the numeric value field for a single line. For multiple lines, use yKeys: [{key, label, color}] — each entry adds a separate line. When yKeys is provided, yKey is ignored.',
     },
 
     // Interactive
     Tabs: {
       props: z.object({
         defaultValue: z.string().nullable(),
+        value: z.string().nullable(),
         tabs: z.array(
           z.object({
             value: z.string(),
@@ -242,7 +252,16 @@ export const explorerCatalog = defineCatalog(schema, {
         ),
       }),
       slots: ["default"],
-      description: "Tabbed content container",
+      description:
+        'Tabbed content container. Use { "$bindState": "/path" } on value for two-way binding — the active tab value is written to state so other components (Metric, Text, etc.) can use visible conditions to react to tab changes. defaultValue sets the initially selected tab when value is not bound.',
+      example: {
+        defaultValue: "1d",
+        value: { $bindState: "/activeTab" },
+        tabs: [
+          { value: "1d", label: "1D" },
+          { value: "1mo", label: "1M" },
+        ],
+      },
     },
 
     TabContent: {

@@ -12,6 +12,7 @@ import {
   Pie,
   PieChart as RechartsPieChart,
   XAxis,
+  YAxis,
 } from "recharts";
 import {
   ChartContainer,
@@ -530,6 +531,85 @@ export const { registry, handlers } = defineRegistry(explorerCatalog, {
           >)
           : [];
 
+      const isMultiLine =
+        Array.isArray(props.yKeys) && props.yKeys.length > 0;
+
+      // --- Multi-line mode ---
+      if (isMultiLine) {
+        const items = rawItems.map((item) => ({
+          ...item,
+          label: String(item[props.xKey] ?? ""),
+        }));
+
+        const lineKeys = props.yKeys!;
+        const chartConfig: ChartConfig = {};
+        lineKeys.forEach((lk, i) => {
+          chartConfig[lk.key] = {
+            label: lk.label ?? lk.key,
+            color: lk.color ?? CHART_COLORS[i % CHART_COLORS.length],
+          };
+        });
+
+        if (items.length === 0) {
+          return (
+            <div className="text-center py-4 text-muted-foreground">
+              No data available
+            </div>
+          );
+        }
+
+        return (
+          <div className="w-full">
+            {props.title && (
+              <p className="text-sm font-medium mb-2">{props.title}</p>
+            )}
+            <ChartContainer
+              config={chartConfig}
+              className="min-h-[200px] w-full [&_svg]:overflow-visible"
+              style={{ height: props.height ?? 300 }}
+            >
+              <RechartsLineChart
+                accessibilityLayer
+                data={items}
+                margin={{ left: 0, right: 8 }}
+              >
+                <CartesianGrid vertical={false} />
+                <XAxis
+                  dataKey="label"
+                  tickLine={false}
+                  tickMargin={10}
+                  axisLine={false}
+                  interval={Math.max(0, Math.ceil(items.length / 4) - 1)}
+                />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={4}
+                  width={40}
+                  tickCount={5}
+                  domain={["auto", "auto"]}
+                  tickFormatter={(v: number) =>
+                    v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v)
+                  }
+                />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                {lineKeys.map((lk) => (
+                  <Line
+                    key={lk.key}
+                    type="monotone"
+                    dataKey={lk.key}
+                    stroke={`var(--color-${lk.key})`}
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                ))}
+              </RechartsLineChart>
+            </ChartContainer>
+          </div>
+        );
+      }
+
+      // --- Single-line mode (backwards compatible) ---
       const { items, valueKey } = processChartData(
         rawItems,
         props.xKey,
@@ -564,17 +644,28 @@ export const { registry, handlers } = defineRegistry(explorerCatalog, {
             className="min-h-[200px] w-full [&_svg]:overflow-visible"
             style={{ height: props.height ?? 300 }}
           >
-            <RechartsLineChart accessibilityLayer data={items}>
+            <RechartsLineChart
+              accessibilityLayer
+              data={items}
+              margin={{ left: 0, right: 8 }}
+            >
               <CartesianGrid vertical={false} />
               <XAxis
                 dataKey="label"
                 tickLine={false}
                 tickMargin={10}
                 axisLine={false}
-                interval={
-                  items.length > 12
-                    ? Math.ceil(items.length / 8) - 1
-                    : undefined
+                interval={Math.max(0, Math.ceil(items.length / 4) - 1)}
+              />
+              <YAxis
+                tickLine={false}
+                axisLine={false}
+                tickMargin={4}
+                width={40}
+                tickCount={5}
+                domain={["auto", "auto"]}
+                tickFormatter={(v: number) =>
+                  v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v)
                 }
               />
               <ChartTooltip content={<ChartTooltipContent />} />
@@ -591,21 +682,40 @@ export const { registry, handlers } = defineRegistry(explorerCatalog, {
       );
     },
 
-    Tabs: ({ props, children }) => (
-      <Tabs defaultValue={props.defaultValue ?? (props.tabs ?? [])[0]?.value}>
-        <TabsList>
-          {(props.tabs ?? []).map((tab) => (
-            <TabsTrigger key={tab.value} value={tab.value}>
-              {tab.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-        {children}
-      </Tabs>
-    ),
+    Tabs: ({ props, children, bindings }) => {
+      const [value, setValue] = useBoundProp<string>(
+        props.value as string | undefined,
+        bindings?.value,
+      );
+      const fallback = props.defaultValue ?? (props.tabs ?? [])[0]?.value;
+      const controlled = value !== undefined;
+
+      return (
+        <Tabs
+          {...(controlled
+            ? { value: value ?? fallback, onValueChange: (v: string) => setValue(v) }
+            : { defaultValue: fallback })}
+        >
+          <TabsList>
+            {(props.tabs ?? []).map((tab) => (
+              <TabsTrigger key={tab.value} value={tab.value}>
+                {tab.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {children}
+        </Tabs>
+      );
+    },
 
     TabContent: ({ props, children }) => (
-      <TabsContent value={props.value}>{children}</TabsContent>
+      <TabsContent
+        value={props.value}
+        forceMount
+        className="data-[state=inactive]:hidden"
+      >
+        {children}
+      </TabsContent>
     ),
 
     Progress: ({ props }) => (
@@ -752,7 +862,7 @@ export const { registry, handlers } = defineRegistry(explorerCatalog, {
         const name = String(item[props.nameKey] ?? `Segment ${i + 1}`);
         chartConfig[name] = {
           label: name,
-          color: PIE_COLORS[i % PIE_COLORS.length],
+          color: CHART_COLORS[i % CHART_COLORS.length],
         };
       });
 
@@ -775,7 +885,7 @@ export const { registry, handlers } = defineRegistry(explorerCatalog, {
                     typeof item[props.valueKey] === "number"
                       ? item[props.valueKey]
                       : parseFloat(String(item[props.valueKey])) || 0,
-                  fill: PIE_COLORS[i % PIE_COLORS.length],
+                  fill: CHART_COLORS[i % CHART_COLORS.length],
                 }))}
                 dataKey="value"
                 nameKey="name"
@@ -1132,7 +1242,7 @@ export const { registry, handlers } = defineRegistry(explorerCatalog, {
 // Chart Helpers
 // =============================================================================
 
-const PIE_COLORS = [
+const CHART_COLORS = [
   "var(--chart-1)",
   "var(--chart-2)",
   "var(--chart-3)",
