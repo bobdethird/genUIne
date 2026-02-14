@@ -31,6 +31,8 @@ RULES:
 - Use PieChart for compositional/proportional data (market share, breakdowns, distributions).
 - Use Tabs when showing multiple categories of data side by side.
 - Use Badge for status indicators.
+- Use Avatar to display icons, logos, or small images with a rounded style and fallback text. Avatar can be nested inside Card, Stack, or any container. For weather, use the iconUrl returned by the weather tool. Set fallback to an emoji or 1-2 chars.
+- In Table cells, use { text, icon } objects to show an icon next to text (e.g. weather condition icons in forecast tables). The icon is rendered as a 24×24 inline image.
 - Use Callout for key facts, tips, warnings, or important takeaways.
 - Use Accordion to organize detailed sections the user can expand for deeper reading.
 - Use Timeline for historical events, processes, step-by-step explanations, or milestones.

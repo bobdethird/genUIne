@@ -24,6 +24,7 @@ import {
   ArrowDown,
   ArrowUp,
   ChevronRight,
+  Code2,
   Loader2,
   Sparkles,
   AlertCircle,
@@ -81,6 +82,34 @@ const TOOL_LABELS: Record<string, [string, string]> = {
   getHackerNewsTop: ["Loading Hacker News", "Loaded Hacker News"],
   webSearch: ["Searching the web", "Searched the web"],
 };
+
+function SpecWithDebug({
+  spec,
+  loading,
+}: {
+  spec: Parameters<typeof ExplorerRenderer>[0]["spec"];
+  loading: boolean;
+}) {
+  const [showJson, setShowJson] = useState(false);
+  return (
+    <div className="w-full flex flex-col gap-2">
+      <ExplorerRenderer spec={spec} loading={loading} />
+      <button
+        type="button"
+        className="self-end inline-flex items-center gap-1 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+        onClick={() => setShowJson((v) => !v)}
+      >
+        <Code2 className="h-3 w-3" />
+        {showJson ? "Hide JSON" : "Show JSON"}
+      </button>
+      {showJson && (
+        <pre className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3 max-h-96 overflow-auto whitespace-pre-wrap break-all">
+          {JSON.stringify(spec, null, 2)}
+        </pre>
+      )}
+    </div>
+  );
+}
 
 function ToolCallDisplay({
   toolName,
@@ -272,7 +301,7 @@ function MessageBubble({
           if (!hasSpec) return null;
           return (
             <div key="spec" className="w-full">
-              <ExplorerRenderer spec={spec} loading={isLast && isStreaming} />
+              <SpecWithDebug spec={spec} loading={isLast && isStreaming} />
             </div>
           );
         }
@@ -303,7 +332,7 @@ function MessageBubble({
       {/* Fallback: render spec at end if no inline position was found */}
       {showSpecAtEnd && (
         <div className="w-full">
-          <ExplorerRenderer spec={spec} loading={isLast && isStreaming} />
+          <SpecWithDebug spec={spec} loading={isLast && isStreaming} />
         </div>
       )}
     </div>

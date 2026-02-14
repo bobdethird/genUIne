@@ -28,6 +28,11 @@ import {
   CardContent,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Avatar as ShadAvatar,
+  AvatarImage,
+  AvatarFallback,
+} from "@/components/ui/avatar";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -347,6 +352,15 @@ export const { registry, handlers } = defineRegistry(explorerCatalog, {
     },
 
     Table: ({ props }) => {
+      type Cell = string | { text: string; icon?: string | null };
+      const columns: string[] = Array.isArray(props.columns)
+        ? props.columns
+        : [];
+      const rows: Cell[][] = Array.isArray(props.rows) ? props.rows : [];
+
+      const cellText = (cell: Cell): string =>
+        typeof cell === "string" ? cell : cell.text;
+
       const [sortCol, setSortCol] = useState<number | null>(null);
       const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
@@ -361,14 +375,14 @@ export const { registry, handlers } = defineRegistry(explorerCatalog, {
 
       const sorted =
         sortCol !== null
-          ? [...props.rows].sort((a, b) => {
-              const av = a[sortCol] ?? "";
-              const bv = b[sortCol] ?? "";
+          ? [...rows].sort((a, b) => {
+              const av = cellText(a[sortCol] ?? "");
+              const bv = cellText(b[sortCol] ?? "");
               return sortDir === "asc"
                 ? av.localeCompare(bv, undefined, { numeric: true })
                 : bv.localeCompare(av, undefined, { numeric: true });
             })
-          : props.rows;
+          : rows;
 
       const resetSort = () => {
         setSortCol(null);
@@ -397,7 +411,7 @@ export const { registry, handlers } = defineRegistry(explorerCatalog, {
             )}
             <TableHeader>
               <TableRow>
-                {props.columns.map((col, i) => {
+                {columns.map((col, i) => {
                 const SortIcon =
                   sortCol === i
                     ? sortDir === "asc"
@@ -423,7 +437,21 @@ export const { registry, handlers } = defineRegistry(explorerCatalog, {
             {sorted.map((row, i) => (
               <TableRow key={i}>
                 {row.map((cell, j) => (
-                  <TableCell key={j}>{cell}</TableCell>
+                  <TableCell key={j}>
+                    {typeof cell === "string" ? (
+                      cell
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5">
+                        {cell.icon && (
+                          <ShadAvatar size="sm">
+                            <AvatarImage src={cell.icon} alt="" />
+                            <AvatarFallback>?</AvatarFallback>
+                          </ShadAvatar>
+                        )}
+                        {cell.text}
+                      </span>
+                    )}
+                  </TableCell>
                 ))}
               </TableRow>
             ))}
@@ -442,6 +470,13 @@ export const { registry, handlers } = defineRegistry(explorerCatalog, {
       >
         {props.text}
       </a>
+    ),
+
+    Avatar: ({ props }) => (
+      <ShadAvatar size={props.size ?? "default"}>
+        <AvatarImage src={props.src} alt={props.alt} />
+        <AvatarFallback>{props.fallback ?? "?"}</AvatarFallback>
+      </ShadAvatar>
     ),
 
     BarChart: ({ props }) => {

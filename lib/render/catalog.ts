@@ -156,18 +156,35 @@ export const explorerCatalog = defineCatalog(schema, {
     Table: {
       props: z.object({
         columns: z.array(z.string()),
-        rows: z.array(z.array(z.string())),
+        rows: z.array(
+          z.array(
+            z.union([
+              z.string(),
+              z.object({
+                text: z.string(),
+                icon: z.string().nullable(),
+              }),
+            ]),
+          ),
+        ),
         caption: z.string().nullable(),
       }),
       description:
-        'Data table. columns: header labels. rows: 2D array of cell strings, e.g. [["Alice","admin"],["Bob","user"]].',
+        'Data table. columns: header labels. rows: 2D array of cells. Each cell is either a plain string or { text, icon } where icon is an image URL rendered inline (24×24). Use { text, icon } for weather icons, status icons, logos, etc.',
       example: {
-        columns: ["Name", "Role"],
+        columns: ["Day", "Condition", "High"],
         rows: [
-          ["Alice", "admin"],
-          ["Bob", "user"],
+          [
+            "Mon",
+            {
+              text: "Sunny",
+              icon: "https://www.accuweather.com/assets/images/weather-icons/v2a/1.svg",
+            },
+            "72°F",
+          ],
+          ["Tue", { text: "Rain", icon: "https://www.accuweather.com/assets/images/weather-icons/v2a/18.svg" }, "65°F"],
         ],
-        caption: "Team members",
+        caption: null,
       },
     },
 
@@ -178,6 +195,23 @@ export const explorerCatalog = defineCatalog(schema, {
       }),
       description: "External link that opens in a new tab",
       example: { text: "View on GitHub", href: "https://github.com" },
+    },
+
+    Avatar: {
+      props: z.object({
+        src: z.string(),
+        alt: z.string(),
+        fallback: z.string().nullable(),
+        size: z.enum(["sm", "default", "lg"]).nullable(),
+      }),
+      description:
+        "Rounded avatar/icon image with fallback text. Can be placed inside Card, Stack, or any container. Use for weather icons (from iconUrl), user avatars, logos, status icons, etc. fallback is 1-2 chars shown if image fails to load.",
+      example: {
+        src: "https://www.accuweather.com/assets/images/weather-icons/v2a/1.svg",
+        alt: "Sunny",
+        fallback: "☀",
+        size: "default",
+      },
     },
 
     // Charts
