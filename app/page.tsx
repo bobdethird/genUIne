@@ -68,17 +68,15 @@ export default function ChatPage() {
 
       </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-hidden relative flex flex-col items-center w-full max-w-3xl mx-auto pt-16 pb-4">
-        
-        {/* Messages or Empty State */}
+      {/* Scrollable Messages Area */}
+      <main className="flex-1 overflow-y-auto pt-16 pb-44">
         {isEmpty ? (
-          <div className="flex-1 flex flex-col items-center justify-center w-full px-4 text-center">
+          <div className="flex flex-col items-center justify-center h-full w-full px-4 text-center">
             <h1 className="text-3xl font-semibold mb-8">Where should we begin?</h1>
           </div>
         ) : (
-          <ScrollArea className="flex-1 w-full px-4 mb-4">
-            <div className="space-y-6 pb-20">
+          <div className="w-full max-w-3xl mx-auto px-4">
+            <div className="space-y-6">
               {messages.map((m) => (
                 <div
                   key={m.id}
@@ -117,62 +115,67 @@ export default function ChatPage() {
                   </div>
               )}
             </div>
-          </ScrollArea>
-        )}
-
-        {/* Input Area - Fixed at bottom for chat, centered for empty state logic handled by flex layout above */}
-        <div className={`w-full px-4 pb-4 ${isEmpty ? "mb-40" : ""}`}> 
-          <div className={`relative flex flex-col bg-zinc-50 dark:bg-zinc-800 rounded-3xl border border-transparent focus-within:border-zinc-300 dark:focus-within:border-zinc-600 transition-all duration-200 overflow-hidden shadow-sm ${isFocused ? 'ring-1 ring-zinc-200 dark:ring-zinc-700' : ''}`}>
-             
-             <Textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onFocus={() => setIsFocused(true)}
-              onBlur={() => setIsFocused(false)}
-              placeholder="Ask anything"
-              className="min-h-[44px] w-full resize-none bg-transparent border-0 border-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 px-4 pt-3 pb-1 text-base max-h-[200px] overflow-y-auto"
-              rows={1}
-            />
-
-            <div className="flex justify-between items-center px-2 pb-2">
-               <div className="flex items-center gap-1">
-                 <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700">
-                           <Plus className="w-5 h-5" />
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Attach file</TooltipContent>
-                 </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700">
-                           <Mic className="w-5 h-5" />
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Voice input</TooltipContent>
-                 </Tooltip>
-               </div>
-               
-               <Button 
-                onClick={(e) => handleSubmit(e)}
-                disabled={!input.trim() || isLoading}
-                size="icon"
-                className={`h-8 w-8 rounded-full transition-all duration-200 ${input.trim() ? 'bg-black text-white dark:bg-white dark:text-black' : 'bg-zinc-200 text-zinc-400 dark:bg-zinc-700 dark:text-zinc-500 cursor-not-allowed'}`}
-               >
-                 <ArrowUp className="w-4 h-4" />
-               </Button>
-            </div>
           </div>
-          {!isEmpty && (
-             <div className="text-xs text-center text-zinc-400 mt-2">
-                ChatGPT can make mistakes. Check important info.
-             </div>
-          )}
-        </div>
+        )}
       </main>
+
+      {/* Fixed Input Area Overlay */}
+      <div className="fixed bottom-0 left-0 right-0 z-10">
+        <div className="pointer-events-none h-8 bg-gradient-to-t from-white dark:from-zinc-950 to-transparent" />
+        <div className="bg-white dark:bg-zinc-950 px-4 pb-4 pt-2">
+          <div className="w-full max-w-3xl mx-auto">
+            <div className={`relative flex flex-col bg-zinc-50 dark:bg-zinc-800 rounded-3xl border border-transparent focus-within:border-zinc-300 dark:focus-within:border-zinc-600 transition-all duration-200 overflow-hidden shadow-sm ${isFocused ? 'ring-1 ring-zinc-200 dark:ring-zinc-700' : ''}`}>
+               
+               <Textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setIsFocused(false)}
+                placeholder="Ask anything"
+                className="min-h-[44px] w-full resize-none bg-transparent border-0 border-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 px-4 pt-3 pb-1 text-base max-h-[200px] overflow-y-auto"
+                rows={1}
+              />
+
+              <div className="flex justify-between items-center px-2 pb-2">
+                 <div className="flex items-center gap-1">
+                   <Tooltip>
+                      <TooltipTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700">
+                             <Plus className="w-5 h-5" />
+                          </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Attach file</TooltipContent>
+                   </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700">
+                             <Mic className="w-5 h-5" />
+                          </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Voice input</TooltipContent>
+                   </Tooltip>
+                 </div>
+                 
+                 <Button 
+                  onClick={(e) => handleSubmit(e)}
+                  disabled={!input.trim() || isLoading}
+                  size="icon"
+                  className={`h-8 w-8 rounded-full transition-all duration-200 ${input.trim() ? 'bg-black text-white dark:bg-white dark:text-black' : 'bg-zinc-200 text-zinc-400 dark:bg-zinc-700 dark:text-zinc-500 cursor-not-allowed'}`}
+                 >
+                   <ArrowUp className="w-4 h-4" />
+                 </Button>
+              </div>
+            </div>
+            {!isEmpty && (
+               <div className="text-xs text-center text-zinc-400 mt-2">
+                  ChatGPT can make mistakes. Check important info.
+               </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
