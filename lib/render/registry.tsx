@@ -221,28 +221,55 @@ export const { registry, handlers } = defineRegistry(explorerCatalog, {
     Stack: ({ props, children }) => {
       const gapClass =
         { sm: "gap-2", md: "gap-4", lg: "gap-6" }[props.gap ?? "md"] ?? "gap-4";
+      const alignClass =
+        {
+          start: "items-start",
+          center: "items-center",
+          end: "items-end",
+          stretch: "items-stretch",
+        }[props.align ?? "stretch"] ?? "items-stretch";
+      const justifyClass =
+        {
+          start: "justify-start",
+          center: "justify-center",
+          end: "justify-end",
+          between: "justify-between",
+          around: "justify-around",
+        }[props.justify ?? "start"] ?? "justify-start";
       return (
         <div
-          className={`flex ${props.direction === "horizontal" ? "flex-row" : "flex-col"} ${props.wrap ? "flex-wrap" : ""} ${gapClass}`}
+          className={`flex ${props.direction === "horizontal" ? "flex-row" : "flex-col"} ${gapClass} ${alignClass} ${justifyClass}`}
         >
           {children}
         </div>
       );
     },
 
-    Card: ({ props, children }) => (
-      <Card>
-        {(props.title || props.description) && (
-          <CardHeader>
-            {props.title && <CardTitle>{props.title}</CardTitle>}
-            {props.description && (
-              <CardDescription>{props.description}</CardDescription>
-            )}
-          </CardHeader>
-        )}
-        <CardContent className="flex flex-col gap-4">{children}</CardContent>
-      </Card>
-    ),
+    Card: ({ props, children }) => {
+      const maxWidthClass =
+        {
+          xs: "max-w-xs",
+          sm: "max-w-sm",
+          md: "max-w-md",
+          lg: "max-w-lg",
+          xl: "max-w-xl",
+          full: "max-w-full",
+        }[props.maxWidth ?? "full"] ?? "max-w-full";
+      const centeredClass = props.centered ? "mx-auto" : "";
+      return (
+        <Card className={`${maxWidthClass} ${centeredClass} w-full`}>
+          {(props.title || props.description) && (
+            <CardHeader>
+              {props.title && <CardTitle>{props.title}</CardTitle>}
+              {props.description && (
+                <CardDescription>{props.description}</CardDescription>
+              )}
+            </CardHeader>
+          )}
+          <CardContent className="flex flex-col gap-4">{children}</CardContent>
+        </Card>
+      );
+    },
 
     Grid: ({ props, children }) => {
       const colsClass =
@@ -287,7 +314,9 @@ export const { registry, handlers } = defineRegistry(explorerCatalog, {
       </Alert>
     ),
 
-    Separator: () => <Separator />,
+    Separator: ({ props }) => (
+      <Separator orientation={props.orientation ?? "horizontal"} />
+    ),
 
     Metric: ({ props }) => {
       const TrendIcon =
@@ -317,70 +346,53 @@ export const { registry, handlers } = defineRegistry(explorerCatalog, {
     },
 
     Table: ({ props }) => {
-      const rawData = props.data;
-      const items: Array<Record<string, unknown>> = Array.isArray(rawData)
-        ? rawData
-        : Array.isArray((rawData as Record<string, unknown>)?.data)
-          ? ((rawData as Record<string, unknown>).data as Array<
-              Record<string, unknown>
-            >)
-          : [];
-
-      const [sortKey, setSortKey] = useState<string | null>(null);
+      const [sortCol, setSortCol] = useState<number | null>(null);
       const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
-      if (items.length === 0) {
-        return (
-          <div className="text-center py-4 text-muted-foreground">
-            {props.emptyMessage ?? "No data"}
-          </div>
-        );
-      }
-
-      const sorted = sortKey
-        ? [...items].sort((a, b) => {
-            const av = a[sortKey];
-            const bv = b[sortKey];
-            // numeric comparison when both values are numbers
-            if (typeof av === "number" && typeof bv === "number") {
-              return sortDir === "asc" ? av - bv : bv - av;
-            }
-            const as = String(av ?? "");
-            const bs = String(bv ?? "");
-            return sortDir === "asc"
-              ? as.localeCompare(bs)
-              : bs.localeCompare(as);
-          })
-        : items;
-
-      const handleSort = (key: string) => {
-        if (sortKey === key) {
+      const handleSort = (colIndex: number) => {
+        if (sortCol === colIndex) {
           setSortDir((d) => (d === "asc" ? "desc" : "asc"));
         } else {
-          setSortKey(key);
+          setSortCol(colIndex);
           setSortDir("asc");
         }
       };
 
+      const sorted =
+        sortCol !== null
+          ? [...props.rows].sort((a, b) => {
+              const av = a[sortCol] ?? "";
+              const bv = b[sortCol] ?? "";
+              return sortDir === "asc"
+                ? av.localeCompare(bv, undefined, { numeric: true })
+                : bv.localeCompare(av, undefined, { numeric: true });
+            })
+          : props.rows;
+
       return (
         <Table>
+          {props.caption && (
+            <caption className="mt-4 text-sm text-muted-foreground">
+              {props.caption}
+            </caption>
+          )}
           <TableHeader>
             <TableRow>
-              {props.columns.map((col) => {
+              {props.columns.map((col, i) => {
                 const SortIcon =
-                  sortKey === col.key
+                  sortCol === i
                     ? sortDir === "asc"
                       ? ArrowUp
                       : ArrowDown
                     : ArrowUpDown;
                 return (
-                  <TableHead key={col.key}>
+                  <TableHead key={i}>
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
-                      onClick={() => handleSort(col.key)}
+                      onClick={() => handleSort(i)}
                     >
-                      {col.label}
+                      {col}
                       <SortIcon className="h-3 w-3 text-muted-foreground" />
                     </button>
                   </TableHead>
@@ -389,12 +401,10 @@ export const { registry, handlers } = defineRegistry(explorerCatalog, {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sorted.map((item, i) => (
+            {sorted.map((row, i) => (
               <TableRow key={i}>
-                {props.columns.map((col) => (
-                  <TableCell key={col.key}>
-                    {String(item[col.key] ?? "")}
-                  </TableCell>
+                {row.map((cell, j) => (
+                  <TableCell key={j}>{cell}</TableCell>
                 ))}
               </TableRow>
             ))}
@@ -567,7 +577,12 @@ export const { registry, handlers } = defineRegistry(explorerCatalog, {
     ),
 
     Progress: ({ props }) => (
-      <Progress value={props.value} max={props.max ?? 100} />
+      <div className="flex flex-col gap-1.5">
+        {props.label && (
+          <p className="text-sm text-muted-foreground">{props.label}</p>
+        )}
+        <Progress value={props.value} max={props.max ?? 100} />
+      </div>
     ),
 
     Skeleton: ({ props }) => (

@@ -50,21 +50,32 @@ export const explorerCatalog = defineCatalog(schema, {
       props: z.object({
         direction: z.enum(["horizontal", "vertical"]).nullable(),
         gap: z.enum(["sm", "md", "lg"]).nullable(),
-        wrap: z.boolean().nullable(),
+        align: z.enum(["start", "center", "end", "stretch"]).nullable(),
+        justify: z
+          .enum(["start", "center", "end", "between", "around"])
+          .nullable(),
       }),
       slots: ["default"],
-      description: "Flex layout container",
-      example: { direction: "vertical", gap: "md", wrap: null },
+      description: "Flex container for layouts",
+      example: { direction: "vertical", gap: "md", align: null, justify: null },
     },
 
     Card: {
       props: z.object({
         title: z.string().nullable(),
         description: z.string().nullable(),
+        maxWidth: z.enum(["xs", "sm", "md", "lg", "xl", "full"]).nullable(),
+        centered: z.boolean().nullable(),
       }),
       slots: ["default"],
-      description: "Card container with optional title and description",
-      example: { title: "Weather", description: "Current conditions" },
+      description:
+        "Card container with optional title, description, and max-width constraint. maxWidth: xs=320px, sm=384px, md=448px, lg=512px, xl=576px, full=100%. centered: true horizontally centers the card via mx-auto.",
+      example: {
+        title: "Login",
+        description: "Sign in to your account",
+        maxWidth: "sm",
+        centered: true,
+      },
     },
 
     Grid: {
@@ -118,8 +129,11 @@ export const explorerCatalog = defineCatalog(schema, {
     },
 
     Separator: {
-      props: z.object({}),
-      description: "Visual divider",
+      props: z.object({
+        orientation: z.enum(["horizontal", "vertical"]).nullable(),
+      }),
+      description: "Visual separator line",
+      example: { orientation: null },
     },
 
     Metric: {
@@ -141,23 +155,19 @@ export const explorerCatalog = defineCatalog(schema, {
 
     Table: {
       props: z.object({
-        data: z.array(z.record(z.string(), z.unknown())),
-        columns: z.array(
-          z.object({
-            key: z.string(),
-            label: z.string(),
-          }),
-        ),
-        emptyMessage: z.string().nullable(),
+        columns: z.array(z.string()),
+        rows: z.array(z.array(z.string())),
+        caption: z.string().nullable(),
       }),
       description:
-        'Data table. Use { "$state": "/path" } to bind read-only data from state.',
+        'Data table. columns: header labels. rows: 2D array of cell strings, e.g. [["Alice","admin"],["Bob","user"]].',
       example: {
-        data: { $state: "/stories" },
-        columns: [
-          { key: "title", label: "Title" },
-          { key: "score", label: "Score" },
+        columns: ["Name", "Role"],
+        rows: [
+          ["Alice", "admin"],
+          ["Bob", "user"],
         ],
+        caption: "Team members",
       },
     },
 
@@ -226,8 +236,10 @@ export const explorerCatalog = defineCatalog(schema, {
       props: z.object({
         value: z.number(),
         max: z.number().nullable(),
+        label: z.string().nullable(),
       }),
-      description: "Progress bar",
+      description: "Progress bar (value 0-100)",
+      example: { value: 65, max: null, label: "Upload progress" },
     },
 
     Skeleton: {
