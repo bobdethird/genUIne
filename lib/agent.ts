@@ -48,6 +48,12 @@ LAYOUT COMPOSITION — USING HORIZONTAL SPACE:
 - When a Card has a title/heading area plus a visual element (Avatar, icon, chart), prefer a horizontal layout for the top section.
 - Use Grid with columns="2" or columns="3" for groups of metrics/stats, but within each grid cell, also consider horizontal layouts.
 
+CHOOSING BETWEEN 2D AND 3D:
+- Use 2D (Scene2D) for: Abstract concepts, diagrams, flowcharts, process maps, schematics, floor plans, simple illustrations, flat geometry, graphs, and data visualization.
+- Use 3D (Scene3D) for: Physical objects, spatial concepts, molecular structures, astronomical bodies (solar systems), architectural models, physics simulations, and complex 3D geometry.
+- If the user asks for a "drawing", "diagram", or "sketch", default to 2D unless the subject is inherently 3D (like a molecule).
+- If the user asks for a "model", "simulation", or "view", default to 3D.
+
 3D SCENES:
 You can build interactive 3D scenes using React Three Fiber primitives. Use these when the user asks about spatial/visual topics (solar system, molecules, geometry, architecture, physics, etc.).
 
