@@ -34,9 +34,22 @@ import {
 } from "lucide-react";
 import { Streamdown } from "streamdown";
 import { code } from "@streamdown/code";
-import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
 import { useLocalChat } from "@/lib/hooks/use-local-chat";
-import { MessageSquare, Plus, History } from "lucide-react";
+import { MessageSquare, Plus } from "lucide-react";
 
 // =============================================================================
 // Types
@@ -585,46 +598,54 @@ export default function ChatPage() {
 
   return (
     <TooltipProvider>
-      <div className="h-screen flex flex-col overflow-hidden relative">
-        {/* Header */}
-        <header className="border-b px-6 py-3 flex items-center justify-between flex-shrink-0 z-20 bg-background/80 backdrop-blur-sm">
-          <div className="flex items-center gap-3">
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" title="Past Chats">
-                  <History className="h-5 w-5" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="left">
-                <SheetHeader>
-                  <SheetTitle>Past Chats</SheetTitle>
-                </SheetHeader>
-                <div className="flex flex-col gap-1 mt-4 overflow-y-auto max-h-[calc(100vh-100px)]">
+      <SidebarProvider defaultOpen={false}>
+        <Sidebar collapsible="offcanvas" side="left">
+          <SidebarHeader />
+          <SidebarContent>
+            <SidebarGroup>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton onClick={handleAddChat} className="gap-2">
+                      <Plus className="h-4 w-4" />
+                      New Chat
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                   {chats.map(chat => (
-                    <Button
-                      key={chat.id}
-                      variant={currentChatId === chat.id ? "secondary" : "ghost"}
-                      className="justify-start text-left truncate"
-                      onClick={() => selectChat(chat.id)}
-                    >
-                      {chat.title || "New Chat"}
-                    </Button>
+                    <SidebarMenuItem key={chat.id}>
+                      <SidebarMenuButton
+                        isActive={currentChatId === chat.id}
+                        onClick={() => selectChat(chat.id)}
+                        className="truncate"
+                      >
+                        {chat.title || "Untitled"}
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
                   ))}
-                  {chats.length === 0 && <div className="text-sm text-muted-foreground p-4">No past chats</div>}
-                </div>
-              </SheetContent>
-            </Sheet>
-            <h1 className="text-lg font-semibold">ChatGPT V2</h1>
-            <Button variant="ghost" size="icon-sm" onClick={handleAddChat} title="New Chat">
-              <Plus className="h-5 w-5" />
-            </Button>
-          </div>
-          <div className="flex items-center gap-2">
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+            {chats.length === 0 && (
+              <div className="px-2 py-3 text-sm text-muted-foreground">No past chats</div>
+            )}
+          </SidebarContent>
+          <SidebarFooter>
             <ThemeToggle />
-          </div>
-        </header>
+          </SidebarFooter>
+        </Sidebar>
+        <SidebarInset>
+          <div className="h-screen flex flex-col overflow-hidden relative">
+            {/* Sidebar trigger — top-left, no overlay; main content stays in focus */}
+            <div className="absolute top-4 left-4 z-20">
+              <SidebarTrigger
+                variant="outline"
+                size="icon"
+                className="h-10 w-10 rounded-full shadow-md bg-background"
+                title="Toggle sidebar"
+              />
+            </div>
 
-        {/* Current Conversation History Bubble (Bottom Right) */}
+            {/* Current Conversation History Bubble (Bottom Right) */}
         {!isEmpty && (
           <div className="absolute bottom-6 right-6 z-50 flex flex-col items-end pointer-events-none">
             <div className="group flex flex-col items-end pointer-events-auto">
@@ -802,7 +823,9 @@ export default function ChatPage() {
             </div>
           </div>
         </div>
-      </div>
+          </div>
+        </SidebarInset>
+      </SidebarProvider>
     </TooltipProvider>
   );
 }

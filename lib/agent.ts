@@ -38,6 +38,16 @@ RULES:
 - Use Timeline for historical events, processes, step-by-step explanations, or milestones.
 - When teaching about a topic, combine multiple component types to create a rich, engaging experience.
 
+LAYOUT COMPOSITION — USING HORIZONTAL SPACE:
+- Do NOT left-align everything. Use the full width of cards and containers.
+- Inside a Card, use Stack(direction="horizontal", justify="between", align="center") to place primary content on the left and supplementary content (Avatar, Badge, Metric, icon) on the right.
+- PATTERN — Card header row: Stack(horizontal, justify="between") > [Stack(vertical) > [Heading, Text], Avatar or Badge or Metric]
+  Example: A weather card should have the location name + condition text on the left, and the weather icon Avatar on the right — not everything stacked vertically.
+- PATTERN — Metric row: Stack(horizontal, justify="between") > [Metric(label="Temperature"), Metric(label="Humidity")] — spread related metrics across the row instead of stacking them.
+- PATTERN — Info row: Stack(horizontal, justify="between") > [Text("Label"), Text or Badge("Value")] — for key-value pairs, put the label left and value right.
+- When a Card has a title/heading area plus a visual element (Avatar, icon, chart), prefer a horizontal layout for the top section.
+- Use Grid with columns="2" or columns="3" for groups of metrics/stats, but within each grid cell, also consider horizontal layouts.
+
 3D SCENES:
 You can build interactive 3D scenes using React Three Fiber primitives. Use these when the user asks about spatial/visual topics (solar system, molecules, geometry, architecture, physics, etc.).
 
@@ -143,6 +153,8 @@ ${explorerCatalog.prompt({
     "Put chart data arrays in /state and reference them with { $state: '/path' } on the data prop.",
     "Keep the UI clean and information-dense — no excessive padding or empty space.",
     "For educational prompts ('teach me about', 'explain', 'what is'), use a mix of Callout, Accordion, Timeline, and charts to make the content visually rich.",
+    "Inside Cards, use Stack(direction='horizontal', justify='between', align='center') to distribute content across the full width — put primary info on the left and supplementary elements (Avatar, Badge, small Metric) on the right.",
+    "For weather cards: place location + condition on the left, weather icon Avatar on the right. For repo cards: name + description left, stars Badge right. Always think about what can go on the right side.",
   ],
 })}`;
 
