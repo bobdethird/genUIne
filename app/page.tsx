@@ -210,6 +210,15 @@ function MessageBubble({
     }
   }
 
+  // Find the last text segment index — only this one is "active".
+  // Earlier text segments have already been superseded by a new step.
+  const lastTextIdx = (() => {
+    for (let i = segments.length - 1; i >= 0; i--) {
+      if (segments[i].kind === "text") return i;
+    }
+    return -1;
+  })();
+
   const hasAnything = segments.length > 0 || hasSpec;
   const showLoader =
     isLast && isStreaming && message.role === "assistant" && !hasAnything;
@@ -235,8 +244,27 @@ function MessageBubble({
     <div className="w-full flex flex-col gap-3">
       {segments.map((seg, i) => {
         if (seg.kind === "text") {
-          // Never render raw text — the spec UI already shows all data.
-          return null;
+          // Only the last text segment is the "active" step.
+          // Earlier text → already superseded → fade out.
+          // Last text when spec is present → also fade out (UI replaces it).
+          const isActive = i === lastTextIdx && !hasSpec;
+          const isFading = i !== lastTextIdx || hasSpec;
+
+          return (
+            <div
+              key={`text-${i}`}
+              className={`text-sm leading-relaxed text-muted-foreground [&_p+p]:mt-3 ${
+                isFading ? "animate-fade-out-collapse" : ""
+              }`}
+            >
+              <Streamdown
+                plugins={{ code }}
+                animated={isLast && isStreaming && isActive}
+              >
+                {seg.text}
+              </Streamdown>
+            </div>
+          );
         }
         if (seg.kind === "spec") {
           if (!hasSpec) return null;
