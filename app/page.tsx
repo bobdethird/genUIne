@@ -363,6 +363,12 @@ export default function ChatPage() {
   // null = Showing latest interaction (live mode)
   // number = Index of 'user' message to show history for
   const [viewedIndex, setViewedIndex] = useState<number | null>(null);
+  // When set, we stay on this turn when pointer leaves the session list (click-to-pin)
+  const [pinnedIndex, setPinnedIndex] = useState<number | null>(null);
+  // When true, main area shows full session as one scrollable document; hover history scrolls to anchor
+  const [previewMode, setPreviewMode] = useState(false);
+  const returnToLiveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastHoveredIndexRef = useRef<number | null>(null);
 
   const {
     chats,
@@ -419,39 +425,40 @@ export default function ChatPage() {
 
   const isStreaming = status === "streaming" || status === "submitted";
 
-  // Derive history items from messages
-  // We look for messages where role='user' to establish the start of a turn.
-  // We use the index as the identifier.
-  const historyItems = messages
-    .map((m, i) => ({ ...m, index: i }))
-    .filter((m) => m.role === "user")
-    .slice(0, -1) // Exclude the most recent user message (current turn)
-    .map((m) => {
-      // Find the next message (assistant response)
-      const assistantMsg = messages[m.index + 1];
+  // All exchanges (user index + messages) for the full-document view and history list
+  const exchangeIndices = messages
+    .map((m, i) => ({ role: m.role, index: i }))
+    .filter((x) => x.role === "user")
+    .map((x) => x.index);
 
-      // Extract user text
-      let userText = "";
-      // Check content property (for new messages) or try to find text part
-      if (typeof (m as any).content === "string") {
-        userText = (m as any).content;
-      } else if (Array.isArray(m.parts)) {
-        // Try to find text part
-        const textPart = m.parts.find((p: any) => p.type === 'text');
-        if (textPart) {
-          userText = (textPart as any).text;
-        }
-      }
+  // Oldest at top, newest at bottom — matches main document scroll order
+  const historyItems = exchangeIndices.map((idx) => {
+    const m = messages[idx];
+    let userText = "";
+    if (typeof (m as any).content === "string") {
+      userText = (m as any).content;
+    } else if (Array.isArray(m.parts)) {
+      const textPart = m.parts.find((p: any) => p.type === "text");
+      if (textPart) userText = (textPart as any).text;
+    }
+    return {
+      index: idx,
+      summary: userText ? userText.slice(0, 50) : "Complex Input",
+    };
+  });
 
-      let summary = userText ? userText.slice(0, 50) : "Complex Input";
-
-      return {
-        index: m.index,
-        summary: summary,
-        timestamp: Date.now(),
-      };
-    })
-    .reverse(); // Show newest first
+  // Scroll main container so the start of this exchange's answer is at the top
+  const scrollToExchangeAnchor = useCallback((userIndex: number) => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    // Prefer answer-start anchor so the beginning of the assistant reply is at top
+    const answerStart = document.getElementById(`exchange-${userIndex}-start`);
+    const fallback = document.getElementById(`exchange-${userIndex}`);
+    const el = answerStart ?? fallback;
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, []);
 
 
   // Determine what to display
@@ -490,8 +497,32 @@ export default function ChatPage() {
   useEffect(() => {
     if (status === 'submitted' || status === 'streaming') {
       setViewedIndex(null);
+      setPinnedIndex(null);
     }
   }, [status]);
+
+  // When entering preview mode, show pinned or latest exchange and scroll to it
+  useEffect(() => {
+    if (!previewMode) return;
+    const target =
+      pinnedIndex ??
+      (exchangeIndices.length > 0 ? exchangeIndices[exchangeIndices.length - 1]! : null);
+    if (target !== null) {
+      setViewedIndex(target);
+      lastHoveredIndexRef.current = target;
+    }
+  }, [previewMode]);
+
+  // In preview mode, smooth-scroll main container to the hovered exchange anchor
+  useEffect(() => {
+    if (!previewMode || viewedIndex == null) return;
+    if (lastHoveredIndexRef.current === viewedIndex) return;
+    lastHoveredIndexRef.current = viewedIndex;
+    const t = requestAnimationFrame(() => {
+      scrollToExchangeAnchor(viewedIndex);
+    });
+    return () => cancelAnimationFrame(t);
+  }, [previewMode, viewedIndex, scrollToExchangeAnchor]);
 
 
   // Track whether the user has scrolled away from the bottom.
@@ -624,27 +655,60 @@ export default function ChatPage() {
           </div>
         </header>
 
-        {/* Current Conversation History Bubble (Bottom Right) */}
+        {/* Current Conversation History Bubble — hover to enter preview: one long document, scroll to exchange */}
         {!isEmpty && (
           <div className="absolute bottom-6 right-6 z-50 flex flex-col items-end pointer-events-none">
             <div className="group flex flex-col items-end pointer-events-auto">
-              {/* The Bubble Content - Revealed on Hover */}
-              <div className="mb-2 w-72 max-h-[60vh] overflow-y-auto bg-popover border rounded-xl shadow-xl p-2 opacity-0 scale-95 origin-bottom-right transition-all duration-200 group-hover:opacity-100 group-hover:scale-100 hidden group-hover:flex flex-col gap-1">
-                <div className="text-xs font-semibold text-muted-foreground px-2 py-1">Current Session</div>
+              <div
+                className="mb-2 w-72 max-h-[60vh] overflow-y-auto overflow-x-hidden bg-popover border rounded-xl shadow-xl p-2 opacity-0 scale-95 origin-bottom-right transition-all duration-200 group-hover:opacity-100 group-hover:scale-100 hidden group-hover:flex flex-col gap-0.5"
+                onMouseEnter={() => {
+                  if (returnToLiveTimeoutRef.current) {
+                    clearTimeout(returnToLiveTimeoutRef.current);
+                    returnToLiveTimeoutRef.current = null;
+                  }
+                  setPreviewMode(true);
+                }}
+                onMouseLeave={() => {
+                  setPreviewMode(false);
+                  lastHoveredIndexRef.current = null;
+                  if (pinnedIndex !== null) {
+                    setViewedIndex(pinnedIndex);
+                    return;
+                  }
+                  returnToLiveTimeoutRef.current = setTimeout(() => {
+                    setViewedIndex(null);
+                    returnToLiveTimeoutRef.current = null;
+                  }, 400);
+                }}
+                onWheel={(e) => {
+                  if (!previewMode) return;
+                  const main = scrollContainerRef.current;
+                  if (!main) return;
+                  e.preventDefault();
+                  main.scrollTop += e.deltaY;
+                }}
+              >
+                <div className="text-xs font-semibold text-muted-foreground px-2 py-1.5 sticky top-0 bg-popover">
+                  Current Session{previewMode ? " · scroll" : pinnedIndex !== null ? " · pinned" : ""}
+                </div>
                 {historyItems.map((item) => (
                   <div
                     key={item.index}
-                    className={`text-sm p-2 rounded-lg cursor-pointer hover:bg-muted/50 transition-colors ${viewedIndex === item.index ? "bg-muted" : ""}`}
-                    onClick={() => setViewedIndex(item.index)}
+                    role="button"
+                    tabIndex={0}
+                    className={`text-sm p-2.5 rounded-lg transition-all duration-150 select-none ${viewedIndex === item.index ? "bg-muted ring-1 ring-border/50" : "hover:bg-muted/60"} ${pinnedIndex === item.index ? "ring-1 ring-primary/40" : ""} cursor-pointer`}
+                    onMouseEnter={() => setViewedIndex(item.index)}
+                    onFocus={() => setViewedIndex(item.index)}
+                    onClick={() => {
+                      setViewedIndex(item.index);
+                      setPinnedIndex(item.index);
+                    }}
                   >
-                    {/* We can improve this label to show prompt + snippet if available */}
                     <div className="font-medium truncate">{item.summary}</div>
-                    {/* Assuming we can get the assistant response snippet easily, but for now summary is the prompt */}
                   </div>
                 ))}
               </div>
 
-              {/* The Toggle Button */}
               <Button variant="outline" size="icon" className="h-10 w-10 rounded-full shadow-lg bg-background">
                 <MessageSquare className="h-5 w-5" />
               </Button>
@@ -685,18 +749,65 @@ export default function ChatPage() {
                 </div>
               </div>
             </div>
+          ) : previewMode ? (
+            /* Preview: one long document with answer-start anchors; hover history scrolls to anchor */
+            <div className="max-w-6xl mx-auto px-10 py-6 pb-24 space-y-8">
+              {exchangeIndices.map((userIdx) => {
+                const userMsg = messages[userIdx];
+                const assistantMsg = messages[userIdx + 1];
+                const isLastExchange = userIdx === exchangeIndices[exchangeIndices.length - 1];
+                return (
+                  <div
+                    key={userIdx}
+                    id={`exchange-${userIdx}`}
+                    className="space-y-4"
+                  >
+                    <MessageBubble
+                      message={userMsg}
+                      isLast={false}
+                      isStreaming={false}
+                    />
+                    {assistantMsg && assistantMsg.role === "assistant" ? (
+                      <div
+                        id={`exchange-${userIdx}-start`}
+                        className="scroll-mt-4"
+                      >
+                        <MessageBubble
+                          message={assistantMsg}
+                          isLast={isLastExchange && !isStreaming}
+                          isStreaming={isLastExchange && isStreaming}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+              {error && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{error.message}</AlertDescription>
+                </Alert>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
           ) : (
-            /* Message thread - Focus Mode */
-            <div className="max-w-6xl mx-auto px-10 py-6 pb-24 space-y-6">
+            /* Single-exchange view (latest or pinned) */
+            <div
+              key={viewedIndex ?? "live"}
+              className="max-w-6xl mx-auto px-10 py-6 pb-24 space-y-6 animate-in fade-in-0 duration-200"
+            >
               {viewedIndex !== null && (
                 <div className="flex justify-center mb-4">
                   <Button
                     variant="secondary"
                     size="xs"
                     className="text-xs h-7 gap-1"
-                    onClick={() => setViewedIndex(null)}
+                    onClick={() => {
+                      setViewedIndex(null);
+                      setPinnedIndex(null);
+                    }}
                   >
-                    Viewing History (Click to return to active chat)
+                    {pinnedIndex !== null ? "Unpin and return to latest" : "Return to latest"}
                   </Button>
                 </div>
               )}
@@ -710,7 +821,6 @@ export default function ChatPage() {
                 />
               ))}
 
-              {/* Error display */}
               {error && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
