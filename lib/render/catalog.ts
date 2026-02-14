@@ -50,21 +50,32 @@ export const explorerCatalog = defineCatalog(schema, {
       props: z.object({
         direction: z.enum(["horizontal", "vertical"]).nullable(),
         gap: z.enum(["sm", "md", "lg"]).nullable(),
-        wrap: z.boolean().nullable(),
+        align: z.enum(["start", "center", "end", "stretch"]).nullable(),
+        justify: z
+          .enum(["start", "center", "end", "between", "around"])
+          .nullable(),
       }),
       slots: ["default"],
-      description: "Flex layout container",
-      example: { direction: "vertical", gap: "md", wrap: null },
+      description: "Flex container for layouts",
+      example: { direction: "vertical", gap: "md", align: null, justify: null },
     },
 
     Card: {
       props: z.object({
         title: z.string().nullable(),
         description: z.string().nullable(),
+        maxWidth: z.enum(["xs", "sm", "md", "lg", "xl", "full"]).nullable(),
+        centered: z.boolean().nullable(),
       }),
       slots: ["default"],
-      description: "Card container with optional title and description",
-      example: { title: "Weather", description: "Current conditions" },
+      description:
+        "Card container with optional title, description, and max-width constraint. maxWidth: xs=320px, sm=384px, md=448px, lg=512px, xl=576px, full=100%. centered: true horizontally centers the card via mx-auto.",
+      example: {
+        title: "Login",
+        description: "Sign in to your account",
+        maxWidth: "sm",
+        centered: true,
+      },
     },
 
     Grid: {
@@ -118,8 +129,11 @@ export const explorerCatalog = defineCatalog(schema, {
     },
 
     Separator: {
-      props: z.object({}),
-      description: "Visual divider",
+      props: z.object({
+        orientation: z.enum(["horizontal", "vertical"]).nullable(),
+      }),
+      description: "Visual separator line",
+      example: { orientation: null },
     },
 
     Metric: {
@@ -141,23 +155,36 @@ export const explorerCatalog = defineCatalog(schema, {
 
     Table: {
       props: z.object({
-        data: z.array(z.record(z.string(), z.unknown())),
-        columns: z.array(
-          z.object({
-            key: z.string(),
-            label: z.string(),
-          }),
+        columns: z.array(z.string()),
+        rows: z.array(
+          z.array(
+            z.union([
+              z.string(),
+              z.object({
+                text: z.string(),
+                icon: z.string().nullable(),
+              }),
+            ]),
+          ),
         ),
-        emptyMessage: z.string().nullable(),
+        caption: z.string().nullable(),
       }),
       description:
-        'Data table. Use { "$state": "/path" } to bind read-only data from state.',
+        'Data table. columns: header labels. rows: 2D array of cells. Each cell is either a plain string or { text, icon } where icon is an image URL rendered inline (24×24). Use { text, icon } for weather icons, status icons, logos, etc.',
       example: {
-        data: { $state: "/stories" },
-        columns: [
-          { key: "title", label: "Title" },
-          { key: "score", label: "Score" },
+        columns: ["Day", "Condition", "High"],
+        rows: [
+          [
+            "Mon",
+            {
+              text: "Sunny",
+              icon: "https://www.accuweather.com/assets/images/weather-icons/v2a/1.svg",
+            },
+            "72°F",
+          ],
+          ["Tue", { text: "Rain", icon: "https://www.accuweather.com/assets/images/weather-icons/v2a/18.svg" }, "65°F"],
         ],
+        caption: null,
       },
     },
 
@@ -168,6 +195,23 @@ export const explorerCatalog = defineCatalog(schema, {
       }),
       description: "External link that opens in a new tab",
       example: { text: "View on GitHub", href: "https://github.com" },
+    },
+
+    Avatar: {
+      props: z.object({
+        src: z.string(),
+        alt: z.string(),
+        fallback: z.string().nullable(),
+        size: z.enum(["sm", "default", "lg"]).nullable(),
+      }),
+      description:
+        "Rounded avatar/icon image with fallback text. Can be placed inside Card, Stack, or any container. Use for weather icons (from iconUrl), user avatars, logos, status icons, etc. fallback is 1-2 chars shown if image fails to load.",
+      example: {
+        src: "https://www.accuweather.com/assets/images/weather-icons/v2a/1.svg",
+        alt: "Sunny",
+        fallback: "☀",
+        size: "default",
+      },
     },
 
     // Charts
@@ -226,8 +270,10 @@ export const explorerCatalog = defineCatalog(schema, {
       props: z.object({
         value: z.number(),
         max: z.number().nullable(),
+        label: z.string().nullable(),
       }),
-      description: "Progress bar",
+      description: "Progress bar (value 0-100)",
+      example: { value: 65, max: null, label: "Upload progress" },
     },
 
     Skeleton: {

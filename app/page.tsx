@@ -24,6 +24,7 @@ import {
   ArrowDown,
   ArrowUp,
   ChevronRight,
+  Code2,
   Loader2,
   Sparkles,
   AlertCircle,
@@ -85,6 +86,34 @@ const TOOL_LABELS: Record<string, [string, string]> = {
   getHackerNewsTop: ["Loading Hacker News", "Loaded Hacker News"],
   webSearch: ["Searching the web", "Searched the web"],
 };
+
+function SpecWithDebug({
+  spec,
+  loading,
+}: {
+  spec: Parameters<typeof ExplorerRenderer>[0]["spec"];
+  loading: boolean;
+}) {
+  const [showJson, setShowJson] = useState(false);
+  return (
+    <div className="w-full flex flex-col gap-2">
+      <ExplorerRenderer spec={spec} loading={loading} />
+      <button
+        type="button"
+        className="self-end inline-flex items-center gap-1 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+        onClick={() => setShowJson((v) => !v)}
+      >
+        <Code2 className="h-3 w-3" />
+        {showJson ? "Hide JSON" : "Show JSON"}
+      </button>
+      {showJson && (
+        <pre className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3 max-h-96 overflow-auto whitespace-pre-wrap break-all">
+          {JSON.stringify(spec, null, 2)}
+        </pre>
+      )}
+    </div>
+  );
+}
 
 function ToolCallDisplay({
   toolName,
@@ -214,6 +243,17 @@ function MessageBubble({
     }
   }
 
+  // Assign a step number to each segment. A new step starts with each text
+  // segment; tools inherit the step of their preceding text. Spec segments
+  // are excluded (always shown). This lets text + its tool calls fade as one unit.
+  const stepOf: number[] = [];
+  let step = -1;
+  for (let i = 0; i < segments.length; i++) {
+    if (segments[i].kind === "text") step++;
+    stepOf[i] = segments[i].kind === "spec" ? -1 : Math.max(0, step);
+  }
+  const lastStep = Math.max(0, step);
+
   const hasAnything = segments.length > 0 || hasSpec;
   const showLoader =
     isLast && isStreaming && message.role === "assistant" && !hasAnything;
@@ -238,16 +278,23 @@ function MessageBubble({
   return (
     <div className="w-full flex flex-col gap-3">
       {segments.map((seg, i) => {
+        // For non-spec segments, determine if this step is active or fading.
+        // A step fades when a newer step exists, or when the spec has appeared.
+        const isActiveStep =
+          seg.kind !== "spec" && stepOf[i] === lastStep && !hasSpec;
+        const isFading = seg.kind !== "spec" && !isActiveStep;
+
         if (seg.kind === "text") {
-          const isLastSegment = i === segments.length - 1;
           return (
             <div
               key={`text-${i}`}
-              className="text-sm leading-relaxed [&_p+p]:mt-3 [&_ul]:mt-2 [&_ol]:mt-2 [&_pre]:mt-2"
+              className={`text-sm leading-relaxed text-muted-foreground [&_p+p]:mt-3 ${
+                isFading ? "animate-fade-out-collapse" : ""
+              }`}
             >
               <Streamdown
                 plugins={{ code }}
-                animated={isLast && isStreaming && isLastSegment}
+                animated={isLast && isStreaming && isActiveStep}
               >
                 {seg.text}
               </Streamdown>
@@ -258,12 +305,15 @@ function MessageBubble({
           if (!hasSpec) return null;
           return (
             <div key="spec" className="w-full">
-              <ExplorerRenderer spec={spec} loading={isLast && isStreaming} />
+              <SpecWithDebug spec={spec} loading={isLast && isStreaming} />
             </div>
           );
         }
         return (
-          <div key={`tools-${i}`} className="flex flex-col gap-1">
+          <div
+            key={`tools-${i}`}
+            className={`flex flex-col gap-1 ${isFading ? "animate-fade-out-collapse" : ""}`}
+          >
             {seg.tools.map((t) => (
               <ToolCallDisplay
                 key={t.toolCallId}
@@ -286,7 +336,7 @@ function MessageBubble({
       {/* Fallback: render spec at end if no inline position was found */}
       {showSpecAtEnd && (
         <div className="w-full">
-          <ExplorerRenderer spec={spec} loading={isLast && isStreaming} />
+          <SpecWithDebug spec={spec} loading={isLast && isStreaming} />
         </div>
       )}
     </div>

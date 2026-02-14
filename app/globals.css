@@ -113,6 +113,29 @@ button {
   }
 }
 
+@keyframes fade-out-collapse {
+  0% {
+    opacity: 1;
+    max-height: 200px;
+    margin-bottom: 0px;
+  }
+  50% {
+    opacity: 0;
+    max-height: 200px;
+    margin-bottom: 0px;
+  }
+  100% {
+    opacity: 0;
+    max-height: 0px;
+    margin-bottom: -12px;
+  }
+}
+
+.animate-fade-out-collapse {
+  overflow: hidden;
+  animation: fade-out-collapse 0.6s ease-out 0.3s forwards;
+}
+
 .animate-shimmer {
   background: linear-gradient(
     90deg,

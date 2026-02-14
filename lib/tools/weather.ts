@@ -65,9 +65,8 @@ export const getWeather = tool({
       };
     };
 
-    const weatherDescription = describeWeatherCode(
-      weather.current.weather_code,
-    );
+    const currentCode = weather.current.weather_code;
+    const weatherDescription = describeWeatherCode(currentCode);
 
     const forecast = weather.daily.time.map((date, i) => ({
       date,
@@ -77,6 +76,7 @@ export const getWeather = tool({
       high: Math.round(weather.daily.temperature_2m_max[i]!),
       low: Math.round(weather.daily.temperature_2m_min[i]!),
       condition: describeWeatherCode(weather.daily.weather_code[i]!),
+      iconUrl: weatherCodeToIconUrl(weather.daily.weather_code[i]!),
       precipitation: weather.daily.precipitation_sum[i]!,
     }));
 
@@ -89,6 +89,7 @@ export const getWeather = tool({
         humidity: weather.current.relative_humidity_2m,
         windSpeed: Math.round(weather.current.wind_speed_10m),
         condition: weatherDescription,
+        iconUrl: weatherCodeToIconUrl(currentCode),
       },
       forecast,
     };
@@ -123,4 +124,40 @@ function describeWeatherCode(code: number): string {
     99: "Thunderstorm with heavy hail",
   };
   return descriptions[code] ?? "Unknown";
+}
+
+/**
+ * Map WMO weather codes to AccuWeather icon numbers (day variants).
+ * Icons: https://developer.accuweather.com/documentation/weather-icons
+ * SVGs:  https://www.accuweather.com/assets/images/weather-icons/v2a/{n}.svg
+ */
+function weatherCodeToIconUrl(code: number): string {
+  const iconMap: Record<number, number> = {
+    0: 1,   // Clear sky        → Sunny
+    1: 2,   // Mainly clear     → Mostly sunny
+    2: 3,   // Partly cloudy    → Partly sunny
+    3: 8,   // Overcast         → Dreary
+    45: 11,  // Foggy            → Fog
+    48: 11,  // Rime fog         → Fog
+    51: 12,  // Light drizzle    → Showers
+    53: 12,  // Moderate drizzle → Showers
+    55: 18,  // Dense drizzle    → Rain
+    61: 12,  // Slight rain      → Showers
+    63: 18,  // Moderate rain    → Rain
+    65: 18,  // Heavy rain       → Rain
+    71: 19,  // Slight snow      → Flurries
+    73: 22,  // Moderate snow    → Snow
+    75: 22,  // Heavy snow       → Snow
+    77: 19,  // Snow grains      → Flurries
+    80: 13,  // Slight showers   → Mostly cloudy w/ showers
+    81: 12,  // Moderate showers → Showers
+    82: 18,  // Violent showers  → Rain
+    85: 20,  // Slight snow shw  → Mostly cloudy w/ flurries
+    86: 22,  // Heavy snow shw   → Snow
+    95: 15,  // Thunderstorm     → T-storms
+    96: 15,  // T-storm + hail   → T-storms
+    99: 15,  // T-storm + hail   → T-storms
+  };
+  const iconNum = iconMap[code] ?? 7; // fallback: Cloudy
+  return `https://www.accuweather.com/assets/images/weather-icons/v2a/${iconNum}.svg`;
 }
