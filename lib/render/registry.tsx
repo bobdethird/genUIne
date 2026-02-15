@@ -109,6 +109,7 @@ import type { Group } from "three";
 import { Billboard, Text as DreiText } from "@react-three/drei";
 import { toVec3, useRotationAnimation } from "./lazy/scene3d-inner";
 import { explorerCatalog } from "./catalog";
+import { FollowUpChoicesComponent } from "@/lib/follow-up-choices";
 
 // =============================================================================
 // Registry
@@ -116,6 +117,11 @@ import { explorerCatalog } from "./catalog";
 
 export const { registry, handlers } = defineRegistry(explorerCatalog, {
   components: {
+    // @ts-expect-error FollowUpChoices is in catalog via spread; type doesn't include it
+    FollowUpChoices: ({ props }) => (
+      <FollowUpChoicesComponent props={props as any} />
+    ),
+
     Stack: ({ props, children }) => {
       const gapClass =
         { sm: "gap-2", md: "gap-4", lg: "gap-6" }[props.gap ?? "md"] ?? "gap-4";

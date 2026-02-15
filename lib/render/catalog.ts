@@ -1,6 +1,7 @@
 import { defineCatalog } from "@json-render/core";
 import { schema } from "@json-render/react/schema";
 import { z } from "zod";
+import { followUpChoicesCatalogEntry } from "@/lib/follow-up-choices";
 
 // =============================================================================
 // Shared 3D schemas
@@ -916,6 +917,11 @@ export const explorerCatalog = defineCatalog(schema, {
         fill: "#333",
       },
     },
+
+    ...(followUpChoicesCatalogEntry as Record<
+      string,
+      { props: z.ZodTypeAny; slots: string[]; description: string; example: object }
+    >),
   },
 
   actions: {

@@ -50,6 +50,7 @@ import {
 import { useLocalChat } from "@/lib/hooks/use-local-chat";
 import { Plus } from "lucide-react";
 import { PromptPill } from "@/components/prompt-pill";
+import { FollowUpProvider } from "@/lib/follow-up-choices";
 
 
 // =============================================================================
@@ -732,6 +733,22 @@ export default function ChatPage() {
     [input, isStreaming, sendMessage, currentChatId, createChat],
   );
 
+  /** Sends follow-up choice as the next user message (shortcut). Does NOT block on isStreaming so the user's selection is always sent after they click Confirm. */
+  const handleSendFollowUp = useCallback(
+    async (shortcutText: string) => {
+      const message = (shortcutText || "").trim();
+      if (!message) return;
+
+      let activeId = currentChatId;
+      if (!activeId) activeId = createChat();
+
+      setViewedIndex(null);
+      setInput("");
+      await sendMessage({ text: message });
+    },
+    [sendMessage, currentChatId, createChat],
+  );
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === "Enter" && !e.shiftKey) {
@@ -803,6 +820,7 @@ export default function ChatPage() {
           </SidebarFooter>
         </Sidebar>
         <SidebarInset>
+          <FollowUpProvider sendFollowUp={handleSendFollowUp}>
           <div className="h-screen flex flex-col overflow-hidden relative">
             {/* Sidebar trigger — top-left, no overlay; main content stays in focus */}
             <div className="absolute top-4 left-4 z-20">
@@ -1146,6 +1164,7 @@ export default function ChatPage() {
           </div>
         </div>
           </div>
+          </FollowUpProvider>
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>
