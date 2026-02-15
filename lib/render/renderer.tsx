@@ -342,7 +342,7 @@ function repairSpec(spec: Spec): Spec {
       changed = true;
     }
 
-    // Normalize markers: ensure each marker uses latitude/longitude
+    // Normalize markers: ensure each marker uses latitude/longitude and label
     if (Array.isArray(p.markers)) {
       const markers = p.markers as Array<Record<string, unknown>>;
       for (const m of markers) {
@@ -362,6 +362,25 @@ function repairSpec(spec: Spec): Spec {
         if (m.title != null && m.label == null) {
           m.label = m.title;
           delete m.title;
+        }
+        // Normalize description aliases
+        if (m.desc != null && m.description == null) {
+          m.description = m.desc;
+          delete m.desc;
+        }
+        if (m.detail != null && m.description == null) {
+          m.description = m.detail;
+          delete m.detail;
+        }
+        // Normalize address aliases
+        if (m.location != null && m.address == null) {
+          m.address = m.location;
+          delete m.location;
+        }
+        // Normalize category aliases
+        if (m.type != null && m.category == null) {
+          m.category = m.type;
+          delete m.type;
         }
       }
       changed = true;
@@ -402,6 +421,14 @@ function repairSpec(spec: Spec): Spec {
   const missingRefs = [...allChildRefs].filter((ref) => !elements[ref]);
   if (missingRefs.length === 0) return spec;
 
+  // Sort so more specific patterns (-tabs suffix) are processed first,
+  // claiming their matching orphans before generic container strategies run.
+  missingRefs.sort((a, b) => {
+    const aScore = a.endsWith("-tabs") ? 0 : 1;
+    const bScore = b.endsWith("-tabs") ? 0 : 1;
+    return aScore - bScore;
+  });
+
   // Find orphaned elements (defined but not referenced and not root)
   const referencedKeys = new Set<string>([spec.root, ...allChildRefs]);
   const orphanedKeys = new Set(
@@ -434,6 +461,72 @@ function repairSpec(spec: Spec): Spec {
       }
     }
     if (matched) continue;
+
+    // ----- Strategy 3: Auto-create missing Tabs wrapper (prefix match) -----
+    // Common LLM pattern: references "foo-tabs" but doesn't define it, while
+    // orphaned "foo-tab-*" TabContent elements exist. Auto-create a Tabs
+    // element that wraps those TabContents.
+    if (missing.endsWith("-tabs")) {
+      const tabPrefix = missing.slice(0, -5); // strip "-tabs"
+      const tabContentOrphans = [...orphanedKeys]
+        .filter(
+          (k) =>
+            k.startsWith(tabPrefix + "-tab-") &&
+            elements[k]?.type === "TabContent",
+        )
+        .sort();
+
+      if (tabContentOrphans.length > 0) {
+        const tabs = tabContentOrphans.map((k) => {
+          const value = (elements[k]?.props?.value as string) ?? k;
+          return { value, label: value.toUpperCase() };
+        });
+
+        elements[missing] = {
+          type: "Tabs",
+          props: {
+            defaultValue: tabs[0]?.value ?? null,
+            value: null,
+            tabs,
+          },
+          children: tabContentOrphans,
+        };
+
+        for (const k of tabContentOrphans) orphanedKeys.delete(k);
+        changed = true;
+        continue;
+      }
+    }
+
+    // ----- Strategy 4: Generic tab container with orphaned TabContent -----
+    // Missing key contains "tabs" (e.g. "tabs-container") or starts with
+    // "tab-", and orphaned TabContent elements exist → create a Tabs wrapper.
+    if (missing.includes("tabs") || missing.startsWith("tab-")) {
+      const tabContentOrphans = [...orphanedKeys]
+        .filter((k) => elements[k]?.type === "TabContent")
+        .sort();
+
+      if (tabContentOrphans.length > 0) {
+        const tabs = tabContentOrphans.map((k) => {
+          const value = (elements[k]?.props?.value as string) ?? k;
+          return { value, label: value.toUpperCase() };
+        });
+
+        elements[missing] = {
+          type: "Tabs",
+          props: {
+            defaultValue: tabs[0]?.value ?? null,
+            value: null,
+            tabs,
+          },
+          children: tabContentOrphans,
+        };
+
+        for (const k of tabContentOrphans) orphanedKeys.delete(k);
+        changed = true;
+        continue;
+      }
+    }
 
     // ----- Strategy 2: Auto-create missing Card wrapper -----
     // "ny-card" → prefix "ny-" → find orphaned ny-* elements → wrap in Card

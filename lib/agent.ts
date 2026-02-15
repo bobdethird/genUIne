@@ -7,6 +7,7 @@ import { getCryptoPrice, getCryptoPriceHistory } from "./tools/crypto";
 import { getStockQuote, getStockPriceHistory } from "./tools/stock";
 import { getHackerNewsTop } from "./tools/hackernews";
 import { webSearch } from "./tools/search";
+import { geocodePlaces } from "./tools/geocode";
 import { getBrightdataTools } from "./mcp/brightdata";
 
 const DEFAULT_MODEL = "anthropic/claude-sonnet-4.5";
@@ -271,7 +272,7 @@ ${explorerCatalog.prompt({
     "Grid is the correct layout for catalog/browsing content (products, articles, stories, repos) where users scan many items at a glance — even with many items. Think Amazon product grid.",
     "When showing a dashboard with multiple data categories (Overview, Details, History), use Tabs at the top level to organize them rather than a long vertical scroll.",
     "When a Grid has Card children, EVERY key in the Grid's children array MUST be defined as a Card element. Never reference a Card key without defining it.",
-    "Use `Map` to display geographic locations, directions, and spatial data. Always provide `latitude` and `longitude` for the map center. Use `markers` to pin specific locations with optional labels and colors. Prefer 'streets' style for city/address views, 'satellite' for terrain/nature views, 'dark' for dark-themed dashboards. Map works great inside Cards alongside Metrics and Text for location-based dashboards (e.g. weather, travel, real estate). Set `zoom` based on scope: 2-4 for continents, 5-8 for countries/states, 9-12 for cities, 13-16 for neighborhoods, 17+ for street level.",
+    "Use `Map` to display geographic locations, directions, and spatial data. IMPORTANT: ALWAYS call `geocodePlaces` BEFORE generating a Map to get accurate latitude/longitude coordinates. NEVER guess or hallucinate coordinates — always use the geocoding tool. Pass all place names/addresses as queries, and optionally provide a proximity coordinate to bias toward the right area. Use the returned coordinates for both the map center and marker positions. Map markers support rich data: label, description, address, rating (0-5), image URL, category (e.g. 'Restaurant'), and color. Prefer 'streets' style for city/address views, 'satellite' for terrain/nature, 'dark' for dashboards. Set `zoom` based on scope: 2-4 for continents, 5-8 for countries/states, 9-12 for cities, 13-16 for neighborhoods, 17+ for street level.",
   ],
 })}`;
 
@@ -285,6 +286,7 @@ const localTools = {
   getStockPriceHistory,
   getHackerNewsTop,
   webSearch,
+  geocodePlaces,
 };
 
 /**

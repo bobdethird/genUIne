@@ -841,7 +841,7 @@ export default function ChatPage() {
             </div>
           ) : previewMode ? (
             /* Preview: one long document with answer-start anchors; hover history scrolls to anchor */
-            <div className="max-w-6xl mx-auto px-10 py-6 pb-24 space-y-8">
+            <div className="w-full px-16 pt-4 pb-24 space-y-8">
               {exchangeIndices.map((userIdx) => {
                 const userMsg = messages[userIdx];
                 const assistantMsg = messages[userIdx + 1];
@@ -886,7 +886,7 @@ export default function ChatPage() {
             /* Single-exchange view (latest or pinned) */
             <div
               key={viewedIndex ?? "live"}
-              className="max-w-6xl mx-auto px-10 py-6 pb-24 space-y-6 animate-in fade-in-0 duration-200"
+              className="w-full px-16 pt-2 pb-24 space-y-6 animate-in fade-in-0 duration-200"
             >
               {viewedIndex !== null && (
                 <div className="flex justify-center mb-4">
