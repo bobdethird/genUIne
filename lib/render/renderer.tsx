@@ -11,6 +11,7 @@ import {
 } from "@json-render/react";
 
 import { registry, Fallback } from "./registry";
+import { LightboxProvider } from "./lightbox";
 
 // =============================================================================
 // Spec deduplication
@@ -697,17 +698,19 @@ export const ExplorerRenderer = memo(function ExplorerRenderer({
   if (!safeSpec || !safeSpec.root || !safeSpec.elements) return null;
 
   return (
-    <StateProvider initialState={safeSpec.state ?? {}}>
-      <VisibilityProvider>
-        <ActionProvider>
-          <Renderer
-            spec={safeSpec}
-            registry={registry}
-            fallback={fallback}
-            loading={loading}
-          />
-        </ActionProvider>
-      </VisibilityProvider>
-    </StateProvider>
+    <LightboxProvider>
+      <StateProvider initialState={safeSpec.state ?? {}}>
+        <VisibilityProvider>
+          <ActionProvider>
+            <Renderer
+              spec={safeSpec}
+              registry={registry}
+              fallback={fallback}
+              loading={loading}
+            />
+          </ActionProvider>
+        </VisibilityProvider>
+      </StateProvider>
+    </LightboxProvider>
   );
 });

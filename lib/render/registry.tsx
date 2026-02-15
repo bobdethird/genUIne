@@ -3,6 +3,7 @@
 import { useState, Suspense, lazy, type ReactNode } from "react";
 import { useBoundProp, defineRegistry } from "@json-render/react";
 import dynamic from "next/dynamic";
+import { useLightbox } from "./lightbox";
 
 // ---- Charts (recharts) — loaded eagerly since they're used very frequently ----
 import {
@@ -364,6 +365,7 @@ export const { registry, handlers } = defineRegistry(explorerCatalog, {
     ),
 
     Image: ({ props }) => {
+      const { open } = useLightbox(props.src ?? "", props.alt ?? "");
       const roundedClass =
         {
           none: "rounded-none",
@@ -380,18 +382,29 @@ export const { registry, handlers } = defineRegistry(explorerCatalog, {
             ? { marginLeft: "auto", marginRight: "auto" }
             : undefined;
       return (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={props.src}
-          alt={props.alt}
-          className={`${roundedClass} overflow-hidden flex-shrink-0`}
+        <button
+          type="button"
+          onClick={open}
+          className={`${roundedClass} overflow-hidden flex-shrink-0 cursor-zoom-in group relative`}
           style={{
             width: props.width ?? "100%",
             height: props.height ?? "auto",
-            objectFit: (props.objectFit as React.CSSProperties["objectFit"]) ?? "cover",
+            display: "block",
             ...alignStyle,
           }}
-        />
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={props.src}
+            alt={props.alt}
+            className="w-full h-full block"
+            style={{
+              objectFit: (props.objectFit as React.CSSProperties["objectFit"]) ?? "cover",
+            }}
+          />
+          {/* Hover hint */}
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-150" />
+        </button>
       );
     },
 
