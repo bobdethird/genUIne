@@ -56,10 +56,11 @@ export const explorerCatalog = defineCatalog(schema, {
           .enum(["start", "center", "end", "between", "around"])
           .nullable(),
         className: z.string().nullable(),
+        style: z.record(z.string(), z.any()).nullable(),
       }),
       slots: ["default"],
       description: "Flex container for layouts",
-      example: { direction: "vertical", gap: "md", align: null, justify: null },
+      example: { direction: "vertical", gap: "md", align: null, justify: null, className: null, style: null },
     },
 
     Card: {
@@ -68,6 +69,8 @@ export const explorerCatalog = defineCatalog(schema, {
         description: z.string().nullable(),
         maxWidth: z.enum(["xs", "sm", "md", "lg", "xl", "full"]).nullable(),
         centered: z.boolean().nullable(),
+        className: z.string().nullable(),
+        style: z.record(z.string(), z.any()).nullable(),
       }),
       slots: ["default"],
       description:
@@ -77,6 +80,8 @@ export const explorerCatalog = defineCatalog(schema, {
         description: "Sign in to your account",
         maxWidth: "sm",
         centered: true,
+        className: null,
+        style: null,
       },
     },
 
@@ -84,10 +89,12 @@ export const explorerCatalog = defineCatalog(schema, {
       props: z.object({
         columns: z.enum(["1", "2", "3", "4"]).nullable(),
         gap: z.enum(["sm", "md", "lg"]).nullable(),
+        className: z.string().nullable(),
+        style: z.record(z.string(), z.any()).nullable(),
       }),
       slots: ["default"],
       description: "Responsive grid layout container",
-      example: { columns: "3", gap: "md" },
+      example: { columns: "3", gap: "md", className: null, style: null },
     },
 
     // Typography
@@ -95,30 +102,35 @@ export const explorerCatalog = defineCatalog(schema, {
       props: z.object({
         text: z.string(),
         level: z.enum(["h1", "h2", "h3", "h4"]).nullable(),
+        className: z.string().nullable(),
+        style: z.record(z.string(), z.any()).nullable(),
       }),
       description: "Section heading",
-      example: { text: "Data Explorer", level: "h1" },
+      example: { text: "Data Explorer", level: "h1", className: null, style: null },
     },
 
     Text: {
       props: z.object({
         content: z.string(),
         muted: z.boolean().nullable(),
+        className: z.string().nullable(),
+        style: z.record(z.string(), z.any()).nullable(),
       }),
       description: "Text content",
-      example: { content: "Here is your data overview." },
+      example: { content: "Here is your data overview.", className: null, style: null },
     },
 
-    // Data display
     Badge: {
       props: z.object({
         text: z.string(),
         variant: z
           .enum(["default", "secondary", "destructive", "outline"])
           .nullable(),
+        className: z.string().nullable(),
+        style: z.record(z.string(), z.any()).nullable(),
       }),
       description: "Status badge",
-      example: { text: "Live", variant: "default" },
+      example: { text: "Live", variant: "default", className: null, style: null },
     },
 
     Alert: {
@@ -126,6 +138,8 @@ export const explorerCatalog = defineCatalog(schema, {
         variant: z.enum(["default", "destructive"]).nullable(),
         title: z.string(),
         description: z.string().nullable(),
+        className: z.string().nullable(),
+        style: z.record(z.string(), z.any()).nullable(),
       }),
       description: "Alert or info message",
     },
@@ -133,9 +147,11 @@ export const explorerCatalog = defineCatalog(schema, {
     Separator: {
       props: z.object({
         orientation: z.enum(["horizontal", "vertical"]).nullable(),
+        className: z.string().nullable(),
+        style: z.record(z.string(), z.any()).nullable(),
       }),
       description: "Visual separator line",
-      example: { orientation: null },
+      example: { orientation: null, className: null, style: null },
     },
 
     Metric: {
@@ -144,6 +160,8 @@ export const explorerCatalog = defineCatalog(schema, {
         value: z.string(),
         detail: z.string().nullable(),
         trend: z.enum(["up", "down", "neutral"]).nullable(),
+        className: z.string().nullable(),
+        style: z.record(z.string(), z.any()).nullable(),
       }),
       description:
         "Single metric display with label, value, and optional trend indicator",
@@ -152,6 +170,8 @@ export const explorerCatalog = defineCatalog(schema, {
         value: "72F",
         detail: "Feels like 68F",
         trend: "up",
+        className: null,
+        style: null,
       },
     },
 

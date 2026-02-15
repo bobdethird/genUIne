@@ -321,7 +321,7 @@ const localTools = {
  * Creates the agent with both local tools and Brightdata MCP tools.
  * MCP tools are fetched asynchronously from the Brightdata SSE server.
  */
-export async function createAgent() {
+export async function createAgent(options: { model?: string } = {}) {
   let mcpTools = {};
   try {
     // mcpTools = await getBrightdataTools();
@@ -329,8 +329,10 @@ export async function createAgent() {
     // console.error("Failed to load Brightdata MCP tools:", error);
   }
 
+  const modelId = options.model || process.env.AI_GATEWAY_MODEL || DEFAULT_MODEL;
+
   return new ToolLoopAgent({
-    model: gateway(process.env.AI_GATEWAY_MODEL || DEFAULT_MODEL),
+    model: gateway(modelId),
     instructions: AGENT_INSTRUCTIONS,
     tools: {
       ...localTools,

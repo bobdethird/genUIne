@@ -162,14 +162,16 @@ const TOOL_LABELS: Record<string, [string, string]> = {
 const SpecWithDebug = memo(function SpecWithDebug({
   spec,
   loading,
+  onUpdateSpec,
 }: {
   spec: Parameters<typeof ExplorerRenderer>[0]["spec"];
   loading: boolean;
+  onUpdateSpec?: (spec: any) => void;
 }) {
   const [showJson, setShowJson] = useState(false);
   return (
     <div className="w-full flex flex-col gap-2">
-      <ExplorerRenderer spec={spec} loading={loading} />
+      <ExplorerRenderer spec={spec} loading={loading} onUpdateSpec={onUpdateSpec} />
       <button
         type="button"
         className="self-end inline-flex items-center gap-1 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors"
@@ -271,13 +273,28 @@ const MessageBubble = memo(function MessageBubble({
   message,
   isLast,
   isStreaming,
+  onUpdateSpec,
 }: {
   message: AppMessage;
   isLast: boolean;
   isStreaming: boolean;
+  onUpdateSpec?: (messageId: string, spec: any) => void;
 }) {
   const isUser = message.role === "user";
+
+  useEffect(() => {
+    if (!isUser) {
+      console.log(`MessageBubble ${message.id} update:`, message.parts?.length, "parts");
+    }
+  }, [message, isUser]);
+
   const { spec, text, hasSpec } = useJsonRenderMessage(message.parts);
+
+  useEffect(() => {
+    if (hasSpec) {
+      console.log(`MessageBubble ${message.id} spec updated:`, spec ? "present" : "null");
+    }
+  }, [spec, hasSpec, message.id]);
 
   // Build ordered segments from parts, collapsing adjacent text and adjacent tools.
   // Spec data parts are tracked so the rendered UI appears inline where the AI
@@ -395,7 +412,11 @@ const MessageBubble = memo(function MessageBubble({
           if (!hasSpec) return null;
           return (
             <div key="spec" className="w-full">
-              <SpecWithDebug spec={spec} loading={isLast && isStreaming} />
+              <SpecWithDebug
+                spec={spec}
+                loading={isLast && isStreaming}
+                onUpdateSpec={onUpdateSpec ? (s) => onUpdateSpec(message.id, s) : undefined}
+              />
             </div>
           );
         }
@@ -426,7 +447,11 @@ const MessageBubble = memo(function MessageBubble({
       {/* Fallback: render spec at end if no inline position was found */}
       {showSpecAtEnd && (
         <div className="w-full">
-          <SpecWithDebug spec={spec} loading={isLast && isStreaming} />
+          <SpecWithDebug
+            spec={spec}
+            loading={isLast && isStreaming}
+            onUpdateSpec={onUpdateSpec ? (s) => onUpdateSpec(message.id, s) : undefined}
+          />
         </div>
       )}
     </div>
@@ -441,7 +466,7 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLElement>(null);
-  
+
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [inputHovered, setInputHovered] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
@@ -711,7 +736,7 @@ export default function ChatPage() {
     }
   }, [viewedIndex]);
 
-  
+
 
   const handleSubmit = useCallback(
     async (text?: string) => {
@@ -758,6 +783,43 @@ export default function ChatPage() {
     },
     [handleSubmit],
   );
+
+  const handleUpdateSpec = useCallback((messageId: string, newSpec: any) => {
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.id !== messageId) return m;
+
+        if (!Array.isArray(m.parts)) return m;
+
+        let specPartInserted = false;
+
+        const newParts = m.parts
+          .filter((p: any) => {
+            if (p.type !== SPEC_DATA_PART_TYPE) return true;
+            if (!specPartInserted) {
+              specPartInserted = true; // Keep the first spec part
+              return true;
+            }
+            return false; // Remove subsequent spec parts (dedupe/cleanup)
+          })
+          .map((p: any) => {
+            if (p.type === SPEC_DATA_PART_TYPE) {
+              // Replace the content of the kept spec part with the new full spec
+              return {
+                ...p,
+                data: {
+                  type: "flat" as const,
+                  spec: newSpec,
+                },
+              };
+            }
+            return p;
+          });
+
+        return { ...m, parts: newParts };
+      })
+    );
+  }, [setMessages]);
 
   // Removed old handleNewChat
 
@@ -821,349 +883,350 @@ export default function ChatPage() {
         </Sidebar>
         <SidebarInset>
           <FollowUpProvider sendFollowUp={handleSendFollowUp}>
-          <div className="h-screen flex flex-col overflow-hidden relative">
-            {/* Sidebar trigger — top-left, no overlay; main content stays in focus */}
-            <div className="absolute top-4 left-4 z-20">
-              <SidebarTrigger
-                variant="ghost"
-                size="icon"
-                className="h-10 w-10 rounded-full"
-                title="Toggle sidebar"
-              />
-            </div>
+            <div className="h-screen flex flex-col overflow-hidden relative">
+              {/* Sidebar trigger — top-left, no overlay; main content stays in focus */}
+              <div className="absolute top-4 left-4 z-20">
+                <SidebarTrigger
+                  variant="ghost"
+                  size="icon"
+                  className="h-10 w-10 rounded-full"
+                  title="Toggle sidebar"
+                />
+              </div>
 
-        {/* Current Conversation History — vertical dot nav on page content; hover to enter preview */}
-        {!isEmpty && (
-          <div className="absolute right-5 top-[25%] -translate-y-1/2 z-50 flex flex-row items-center pointer-events-none">
-            <div
-              className="group flex flex-row items-center pointer-events-auto"
-              onMouseEnter={() => {
-                if (returnToLiveTimeoutRef.current) {
-                  clearTimeout(returnToLiveTimeoutRef.current);
-                  returnToLiveTimeoutRef.current = null;
-                }
-                setPreviewMode(true);
-              }}
-              onMouseLeave={() => {
-                setPreviewMode(false);
-                lastHoveredIndexRef.current = null;
-                if (pinnedIndex !== null) {
-                  setViewedIndex(pinnedIndex);
-                  return;
-                }
-                returnToLiveTimeoutRef.current = setTimeout(() => {
-                  setViewedIndex(null);
-                  returnToLiveTimeoutRef.current = null;
-                }, 400);
-              }}
-            >
-              <div
-                className={`mr-2 w-72 max-h-[60vh] overflow-hidden rounded-xl bg-popover/90 backdrop-blur-md border border-border/50 opacity-0 scale-95 origin-right transition-all duration-200 group-hover:opacity-100 group-hover:scale-100 hidden flex-col order-first ${previewMode ? "group-hover:flex" : ""}`}
-                onWheel={(e) => {
-                  if (!previewMode) return;
-                  const main = scrollContainerRef.current;
-                  if (!main) return;
-                  e.preventDefault();
-                  main.scrollTop += e.deltaY;
-                }}
-              >
-                <div
-                  className="overflow-y-auto overflow-x-hidden max-h-[60vh] p-2 flex flex-col gap-0.5 rounded-xl"
-                  onWheel={(e) => {
-                    if (!previewMode) return;
-                    const main = scrollContainerRef.current;
-                    if (!main) return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    main.scrollTop += e.deltaY;
-                  }}
-                >
-                  <div className="text-xs font-semibold text-muted-foreground px-2 py-1.5 sticky top-0 bg-popover/90 backdrop-blur-md">
-                    Current Session{previewMode ? " · scroll" : pinnedIndex !== null ? " · pinned" : ""}
-                  </div>
-                  {historyItems.map((item) => (
+              {/* Current Conversation History — vertical dot nav on page content; hover to enter preview */}
+              {!isEmpty && (
+                <div className="absolute right-5 top-[25%] -translate-y-1/2 z-50 flex flex-row items-center pointer-events-none">
                   <div
-                    key={item.index}
-                    role="button"
-                    tabIndex={0}
-                    className={`text-sm p-2.5 rounded-lg transition-all duration-150 select-none ${viewedIndex === item.index ? "bg-muted" : "hover:bg-muted/60"} cursor-pointer`}
-                    onMouseEnter={() => setViewedIndex(item.index)}
-                    onFocus={() => setViewedIndex(item.index)}
-                    onClick={() => {
-                      setViewedIndex(item.index);
-                      setPinnedIndex(item.index);
+                    className="group flex flex-row items-center pointer-events-auto"
+                    onMouseEnter={() => {
+                      if (returnToLiveTimeoutRef.current) {
+                        clearTimeout(returnToLiveTimeoutRef.current);
+                        returnToLiveTimeoutRef.current = null;
+                      }
+                      setPreviewMode(true);
+                    }}
+                    onMouseLeave={() => {
                       setPreviewMode(false);
+                      lastHoveredIndexRef.current = null;
+                      if (pinnedIndex !== null) {
+                        setViewedIndex(pinnedIndex);
+                        return;
+                      }
+                      returnToLiveTimeoutRef.current = setTimeout(() => {
+                        setViewedIndex(null);
+                        returnToLiveTimeoutRef.current = null;
+                      }, 400);
                     }}
                   >
-                    <div className="font-medium truncate">{item.summary}</div>
-                  </div>
-                ))}
-                </div>
-              </div>
-
-              <div
-                className="flex flex-col items-center gap-1.5 py-3 px-2 bg-background/30 backdrop-blur-sm rounded-l-xl"
-                aria-label="Session navigation"
-              >
-                {historyItems.map((item, i) => {
-                  const lastIdx = exchangeIndices[exchangeIndices.length - 1];
-                  const currentIndex = viewedIndex ?? lastIdx ?? -1;
-                  const isCurrent = item.index === currentIndex;
-                  return (
-                  <Fragment key={item.index}>
-                    {i > 0 && (
-                      <div
-                        className="w-px h-3 shrink-0 bg-muted-foreground/30"
-                        aria-hidden
-                      />
-                    )}
-                    <button
-                      key={item.index}
-                      type="button"
-                      className={`w-2.5 h-2.5 rounded-full transition-all duration-150 shrink-0 ${
-                        isCurrent
-                          ? "bg-foreground scale-110"
-                          : "bg-muted-foreground/40 hover:bg-muted-foreground/70"
-                      } ${pinnedIndex === item.index && previewMode ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}`}
-                      title={item.summary}
-                      aria-label={`Go to: ${item.summary}`}
-                      onMouseEnter={() => setViewedIndex(item.index)}
-                      onFocus={() => setViewedIndex(item.index)}
-                      onClick={() => {
-                        setViewedIndex(item.index);
-                        setPinnedIndex(item.index);
-                        setPreviewMode(false);
+                    <div
+                      className={`mr-2 w-72 max-h-[60vh] overflow-hidden rounded-xl bg-popover/90 backdrop-blur-md border border-border/50 opacity-0 scale-95 origin-right transition-all duration-200 group-hover:opacity-100 group-hover:scale-100 hidden flex-col order-first ${previewMode ? "group-hover:flex" : ""}`}
+                      onWheel={(e) => {
+                        if (!previewMode) return;
+                        const main = scrollContainerRef.current;
+                        if (!main) return;
+                        e.preventDefault();
+                        main.scrollTop += e.deltaY;
                       }}
-                    />
-                  </Fragment>
-                );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Messages area */}
-        <main ref={scrollContainerRef} className="flex-1 overflow-auto">
-          {isEmpty ? (
-            /* Empty state */
-            <div className="h-full flex flex-col items-center justify-center px-6 py-0">
-              <div className="max-w-2xl w-full space-y-8">
-                <div className="text-center space-y-2">
-                  <h2 className="text-2xl font-semibold tracking-tight">
-                    Explore the Internet Differently
-                  </h2>
-                </div>
-
-                {/* Suggestions */}
-                <div className="flex flex-wrap gap-2 justify-center">
-                  {SUGGESTIONS.map((s) => (
-                    <Button
-                      key={s.label}
-                      variant="outline"
-                      size="sm"
-                      className="text-muted-foreground"
-                      onClick={() => handleSubmit(s.prompt)}
                     >
-                      <Sparkles className="h-3 w-3" />
-                      {s.label}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ) : previewMode ? (
-            /* Preview: one long document with answer-start anchors; hover history scrolls to anchor */
-            <div className="w-full px-16 pt-4 pb-24 space-y-8">
-              {exchangeIndices.map((userIdx) => {
-                const userMsg = messages[userIdx];
-                const assistantMsg = messages[userIdx + 1];
-                const isLastExchange = userIdx === exchangeIndices[exchangeIndices.length - 1];
-                const rawPrompt = extractPromptFromMessage(userMsg);
-                return (
-                  <div
-                    key={userIdx}
-                    id={`exchange-${userIdx}`}
-                    className="space-y-4"
-                  >
-                    {assistantMsg && assistantMsg.role === "assistant" ? (
                       <div
-                        id={`exchange-${userIdx}-start`}
-                        className="scroll-mt-4"
+                        className="overflow-y-auto overflow-x-hidden max-h-[60vh] p-2 flex flex-col gap-0.5 rounded-xl"
+                        onWheel={(e) => {
+                          if (!previewMode) return;
+                          const main = scrollContainerRef.current;
+                          if (!main) return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          main.scrollTop += e.deltaY;
+                        }}
                       >
-                        <OutputBlock rawPrompt={rawPrompt} aiTitle={aiTitles[rawPrompt.trim()]}>
-                          <MessageBubble
-                            message={assistantMsg}
-                            isLast={isLastExchange && !isStreaming}
-                            isStreaming={isLastExchange && isStreaming}
-                          />
-                        </OutputBlock>
+                        <div className="text-xs font-semibold text-muted-foreground px-2 py-1.5 sticky top-0 bg-popover/90 backdrop-blur-md">
+                          Current Session{previewMode ? " · scroll" : pinnedIndex !== null ? " · pinned" : ""}
+                        </div>
+                        {historyItems.map((item) => (
+                          <div
+                            key={item.index}
+                            role="button"
+                            tabIndex={0}
+                            className={`text-sm p-2.5 rounded-lg transition-all duration-150 select-none ${viewedIndex === item.index ? "bg-muted" : "hover:bg-muted/60"} cursor-pointer`}
+                            onMouseEnter={() => setViewedIndex(item.index)}
+                            onFocus={() => setViewedIndex(item.index)}
+                            onClick={() => {
+                              setViewedIndex(item.index);
+                              setPinnedIndex(item.index);
+                              setPreviewMode(false);
+                            }}
+                          >
+                            <div className="font-medium truncate">{item.summary}</div>
+                          </div>
+                        ))}
                       </div>
-                    ) : (
-                      <OutputBlock rawPrompt={rawPrompt} aiTitle={aiTitles[rawPrompt.trim()]}>
-                        <div className="text-sm text-muted-foreground animate-shimmer">Thinking...</div>
-                      </OutputBlock>
-                    )}
+                    </div>
+
+                    <div
+                      className="flex flex-col items-center gap-1.5 py-3 px-2 bg-background/30 backdrop-blur-sm rounded-l-xl"
+                      aria-label="Session navigation"
+                    >
+                      {historyItems.map((item, i) => {
+                        const lastIdx = exchangeIndices[exchangeIndices.length - 1];
+                        const currentIndex = viewedIndex ?? lastIdx ?? -1;
+                        const isCurrent = item.index === currentIndex;
+                        return (
+                          <Fragment key={item.index}>
+                            {i > 0 && (
+                              <div
+                                className="w-px h-3 shrink-0 bg-muted-foreground/30"
+                                aria-hidden
+                              />
+                            )}
+                            <button
+                              key={item.index}
+                              type="button"
+                              className={`w-2.5 h-2.5 rounded-full transition-all duration-150 shrink-0 ${isCurrent
+                                ? "bg-foreground scale-110"
+                                : "bg-muted-foreground/40 hover:bg-muted-foreground/70"
+                                } ${pinnedIndex === item.index && previewMode ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}`}
+                              title={item.summary}
+                              aria-label={`Go to: ${item.summary}`}
+                              onMouseEnter={() => setViewedIndex(item.index)}
+                              onFocus={() => setViewedIndex(item.index)}
+                              onClick={() => {
+                                setViewedIndex(item.index);
+                                setPinnedIndex(item.index);
+                                setPreviewMode(false);
+                              }}
+                            />
+                          </Fragment>
+                        );
+                      })}
+                    </div>
                   </div>
-                );
-              })}
-              {error && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{error.message}</AlertDescription>
-                </Alert>
+                </div>
               )}
-              <div ref={messagesEndRef} />
-            </div>
-          ) : (
-            /* Single-exchange view (latest or pinned) — render all exchanges, toggle visibility to avoid remount/animation */
-            <div className="w-full px-16 pt-2 pb-24 space-y-6">
-              {viewedIndex !== null && (
-                <div className="flex justify-center mb-4">
-                  <Button
-                    variant="secondary"
-                    size="xs"
-                    className="text-xs h-7 gap-1"
-                    onClick={() => {
-                      setViewedIndex(null);
-                      setPinnedIndex(null);
+
+              {/* Messages area */}
+              <main ref={scrollContainerRef} className="flex-1 overflow-auto">
+                {isEmpty ? (
+                  /* Empty state */
+                  <div className="h-full flex flex-col items-center justify-center px-6 py-0">
+                    <div className="max-w-2xl w-full space-y-8">
+                      <div className="text-center space-y-2">
+                        <h2 className="text-2xl font-semibold tracking-tight">
+                          Explore the Internet Differently
+                        </h2>
+                      </div>
+
+                      {/* Suggestions */}
+                      <div className="flex flex-wrap gap-2 justify-center">
+                        {SUGGESTIONS.map((s) => (
+                          <Button
+                            key={s.label}
+                            variant="outline"
+                            size="sm"
+                            className="text-muted-foreground"
+                            onClick={() => handleSubmit(s.prompt)}
+                          >
+                            <Sparkles className="h-3 w-3" />
+                            {s.label}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : previewMode ? (
+                  /* Preview: one long document with answer-start anchors; hover history scrolls to anchor */
+                  <div className="w-full px-16 pt-4 pb-24 space-y-8">
+                    {exchangeIndices.map((userIdx) => {
+                      const userMsg = messages[userIdx];
+                      const assistantMsg = messages[userIdx + 1];
+                      const isLastExchange = userIdx === exchangeIndices[exchangeIndices.length - 1];
+                      const rawPrompt = extractPromptFromMessage(userMsg);
+                      return (
+                        <div
+                          key={userIdx}
+                          id={`exchange-${userIdx}`}
+                          className="space-y-4"
+                        >
+                          {assistantMsg && assistantMsg.role === "assistant" ? (
+                            <div
+                              id={`exchange-${userIdx}-start`}
+                              className="scroll-mt-4"
+                            >
+                              <OutputBlock rawPrompt={rawPrompt} aiTitle={aiTitles[rawPrompt.trim()]}>
+                                <MessageBubble
+                                  message={assistantMsg}
+                                  isLast={isLastExchange && !isStreaming}
+                                  isStreaming={isLastExchange && isStreaming}
+                                  onUpdateSpec={handleUpdateSpec}
+                                />
+                              </OutputBlock>
+                            </div>
+                          ) : (
+                            <OutputBlock rawPrompt={rawPrompt} aiTitle={aiTitles[rawPrompt.trim()]}>
+                              <div className="text-sm text-muted-foreground animate-shimmer">Thinking...</div>
+                            </OutputBlock>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {error && (
+                      <Alert variant="destructive">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>{error.message}</AlertDescription>
+                      </Alert>
+                    )}
+                    <div ref={messagesEndRef} />
+                  </div>
+                ) : (
+                  /* Single-exchange view (latest or pinned) — render all exchanges, toggle visibility to avoid remount/animation */
+                  <div className="w-full px-16 pt-2 pb-24 space-y-6">
+                    {viewedIndex !== null && (
+                      <div className="flex justify-center mb-4">
+                        <Button
+                          variant="secondary"
+                          size="xs"
+                          className="text-xs h-7 gap-1"
+                          onClick={() => {
+                            setViewedIndex(null);
+                            setPinnedIndex(null);
+                          }}
+                        >
+                          {pinnedIndex !== null ? "Unpin and return to latest" : "Return to latest"}
+                        </Button>
+                      </div>
+                    )}
+
+                    <div id={viewedIndex !== null ? "pinned-exchange-start" : undefined} className="space-y-6">
+                      {exchangeIndices.map((userIdx) => {
+                        const userMsg = messages[userIdx];
+                        const assistantMsg = messages[userIdx + 1];
+                        const lastExchangeIdx = exchangeIndices[exchangeIndices.length - 1];
+                        const isActive =
+                          viewedIndex === userIdx ||
+                          (viewedIndex === null && userIdx === lastExchangeIdx);
+                        if (!userMsg) return null;
+
+                        const rawPrompt = extractPromptFromMessage(userMsg);
+                        return (
+                          <div
+                            key={userIdx}
+                            className={isActive ? "space-y-6" : "hidden"}
+                            aria-hidden={!isActive}
+                          >
+                            {assistantMsg && assistantMsg.role === "assistant" ? (
+                              <OutputBlock
+                                rawPrompt={rawPrompt}
+                                aiTitle={aiTitles[rawPrompt.trim()]}
+                              >
+                                <MessageBubble
+                                  message={assistantMsg}
+                                  isLast={userIdx === lastExchangeIdx && !isStreaming}
+                                  isStreaming={
+                                    isStreaming &&
+                                    viewedIndex === null &&
+                                    userIdx === lastExchangeIdx
+                                  }
+                                  onUpdateSpec={handleUpdateSpec}
+                                />
+                              </OutputBlock>
+                            ) : (
+                              <OutputBlock
+                                rawPrompt={rawPrompt}
+                                aiTitle={aiTitles[rawPrompt.trim()]}
+                              >
+                                <div className="text-sm text-muted-foreground animate-shimmer">
+                                  Thinking...
+                                </div>
+                              </OutputBlock>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {error && (
+                      <Alert variant="destructive">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>{error.message}</AlertDescription>
+                      </Alert>
+                    )}
+
+                    <div ref={messagesEndRef} />
+                  </div>
+                )}
+              </main>
+
+              {/* Input bar - overlays bottom of chat area */}
+              <div className="absolute bottom-0 left-0 right-0 px-6 pb-10 pt-10 bg-gradient-to-t from-background/60 to-transparent pointer-events-none z-10">
+
+                <div
+                  className="mx-auto relative pointer-events-auto transition-all duration-300 ease-in-out"
+                  style={{ maxWidth: inputExpanded ? "32rem" : "12rem" }}
+                  onMouseEnter={() => setInputHovered(true)}
+                  onMouseLeave={() => setInputHovered(false)}
+                >
+                  <Textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    onFocus={() => setInputFocused(true)}
+                    onBlur={() => setInputFocused(false)}
+                    placeholder={
+                      isStreaming && !input
+                        ? "     Thinking..."
+                        : isEmpty
+                          ? "e.g., Compare weather in NYC, London, and Tokyo..."
+                          : "Ask a follow-up..."
+                    }
+                    rows={1}
+                    className={[
+                      "resize-none shadow-sm focus-visible:ring-0 focus-visible:border-input min-h-0 transition-all duration-300 ease-in-out",
+                      isStreaming && !input ? "bg-background text-muted-foreground" : "bg-card",
+                      inputExpanded ? "cursor-text" : "cursor-default caret-transparent",
+                      inputExpanded ? "text-lg" : "text-sm",
+                      isStreaming && !input && "animate-shimmer",
+                    ].join(" ")}
+                    style={{
+                      height: inputExpanded ? undefined : "48px",
+                      minHeight: inputExpanded ? "48px" : undefined,
+                      maxHeight: inputExpanded ? "200px" : undefined,
+                      overflow: inputExpanded ? "auto" : "hidden",
+                      borderRadius: inputExpanded ? "1.5rem" : "9999px",
+                      paddingLeft: inputExpanded ? "1rem" : "2.5rem",
+                      paddingRight: inputExpanded ? "3rem" : "1.5rem",
+                      paddingTop: "12px",
+                      paddingBottom: "12px",
+                    }}
+                    autoFocus
+                  />
+                  <div
+                    className="absolute right-2 bottom-2 transition-all duration-200"
+                    style={{
+                      opacity: inputExpanded ? 1 : 0,
+                      pointerEvents: inputExpanded ? "auto" : "none",
                     }}
                   >
-                    {pinnedIndex !== null ? "Unpin and return to latest" : "Return to latest"}
-                  </Button>
-                </div>
-              )}
-
-              <div id={viewedIndex !== null ? "pinned-exchange-start" : undefined} className="space-y-6">
-              {exchangeIndices.map((userIdx) => {
-                const userMsg = messages[userIdx];
-                const assistantMsg = messages[userIdx + 1];
-                const lastExchangeIdx = exchangeIndices[exchangeIndices.length - 1];
-                const isActive =
-                  viewedIndex === userIdx ||
-                  (viewedIndex === null && userIdx === lastExchangeIdx);
-                if (!userMsg) return null;
-
-                const rawPrompt = extractPromptFromMessage(userMsg);
-                return (
-                  <div
-                    key={userIdx}
-                    className={isActive ? "space-y-6" : "hidden"}
-                    aria-hidden={!isActive}
-                  >
-                    {assistantMsg && assistantMsg.role === "assistant" ? (
-                      <OutputBlock
-                        rawPrompt={rawPrompt}
-                        aiTitle={aiTitles[rawPrompt.trim()]}
-                      >
-                        <MessageBubble
-                          message={assistantMsg}
-                          isLast={userIdx === lastExchangeIdx && !isStreaming}
-                          isStreaming={
-                            isStreaming &&
-                            viewedIndex === null &&
-                            userIdx === lastExchangeIdx
-                          }
-                        />
-                      </OutputBlock>
-                    ) : (
-                      <OutputBlock
-                        rawPrompt={rawPrompt}
-                        aiTitle={aiTitles[rawPrompt.trim()]}
-                      >
-                        <div className="text-sm text-muted-foreground animate-shimmer">
-                          Thinking...
-                        </div>
-                      </OutputBlock>
-                    )}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="icon-sm"
+                          onClick={() => handleSubmit()}
+                          disabled={!input.trim() || isStreaming}
+                        >
+                          {isStreaming ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <ArrowUp className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Send message</TooltipContent>
+                    </Tooltip>
                   </div>
-                );
-              })}
+                </div>
               </div>
-
-              {error && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{error.message}</AlertDescription>
-                </Alert>
-              )}
-
-              <div ref={messagesEndRef} />
             </div>
-          )}
-        </main>
-
-        {/* Input bar - overlays bottom of chat area */}
-        <div className="absolute bottom-0 left-0 right-0 px-6 pb-10 pt-10 bg-gradient-to-t from-background/60 to-transparent pointer-events-none z-10">
-          
-          <div
-            className="mx-auto relative pointer-events-auto transition-all duration-300 ease-in-out"
-            style={{ maxWidth: inputExpanded ? "32rem" : "12rem" }}
-            onMouseEnter={() => setInputHovered(true)}
-            onMouseLeave={() => setInputHovered(false)}
-          >
-            <Textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onFocus={() => setInputFocused(true)}
-              onBlur={() => setInputFocused(false)}
-              placeholder={
-                isStreaming && !input
-                  ? "     Thinking..."
-                  : isEmpty
-                    ? "e.g., Compare weather in NYC, London, and Tokyo..."
-                    : "Ask a follow-up..."
-              }
-              rows={1}
-              className={[
-                "resize-none shadow-sm focus-visible:ring-0 focus-visible:border-input min-h-0 transition-all duration-300 ease-in-out",
-                isStreaming && !input ? "bg-background text-muted-foreground" : "bg-card",
-                inputExpanded ? "cursor-text" : "cursor-default caret-transparent",
-                inputExpanded ? "text-lg" : "text-sm",
-                isStreaming && !input && "animate-shimmer",
-              ].join(" ")}
-              style={{
-                height: inputExpanded ? undefined : "48px",
-                minHeight: inputExpanded ? "48px" : undefined,
-                maxHeight: inputExpanded ? "200px" : undefined,
-                overflow: inputExpanded ? "auto" : "hidden",
-                borderRadius: inputExpanded ? "1.5rem" : "9999px",
-                paddingLeft: inputExpanded ? "1rem" : "2.5rem",
-                paddingRight: inputExpanded ? "3rem" : "1.5rem",
-                paddingTop: "12px",
-                paddingBottom: "12px",
-              }}
-              autoFocus
-            />
-            <div
-              className="absolute right-2 bottom-2 transition-all duration-200"
-              style={{
-                opacity: inputExpanded ? 1 : 0,
-                pointerEvents: inputExpanded ? "auto" : "none",
-              }}
-            >
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    size="icon-sm"
-                    onClick={() => handleSubmit()}
-                    disabled={!input.trim() || isStreaming}
-                  >
-                    {isStreaming ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <ArrowUp className="h-4 w-4" />
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Send message</TooltipContent>
-              </Tooltip>
-            </div>
-          </div>
-        </div>
-          </div>
           </FollowUpProvider>
         </SidebarInset>
       </SidebarProvider>

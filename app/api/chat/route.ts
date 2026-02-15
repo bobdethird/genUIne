@@ -42,6 +42,8 @@ export async function POST(req: Request) {
   const lastUserText = getLastUserMessageText(uiMessages);
   const useSolarShortcut = SOLAR_SYSTEM_INTENT.test(lastUserText.trim());
 
+  const RENDERING_INTENT = /\b(2d|3d|draw|drawing|diagram|sketch|render|rendering|model|modeling|simulation|visualize|visualization)\b/i;
+
   if (useSolarShortcut) {
     const flatSpec = getSolarSystemSpec();
     const textId = crypto.randomUUID?.() ?? `text-${Date.now()}`;
@@ -64,7 +66,10 @@ export async function POST(req: Request) {
     return createUIMessageStreamResponse({ stream });
   }
 
-  const agent = await createAgent();
+  const isRendering = RENDERING_INTENT.test(lastUserText);
+  const model = isRendering ? "anthropic/claude-3-5-sonnet-20241022" : undefined;
+
+  const agent = await createAgent({ model });
   const modelMessages = await convertToModelMessages(uiMessages);
   const result = await agent.stream({ messages: modelMessages });
 

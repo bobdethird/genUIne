@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useMemo, memo } from "react";
+import { type ReactNode, useMemo, memo, useState, useCallback, useEffect } from "react";
 import {
   Renderer,
   type ComponentRenderer,
@@ -627,9 +627,21 @@ function repairSpec(spec: Spec): Spec {
 // ExplorerRenderer
 // =============================================================================
 
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { UIEditor } from "@/components/ui-editor";
+// ... existing imports ...
+
+// ... existing imports ...
+
 interface ExplorerRendererProps {
   spec: Spec | null;
   loading?: boolean;
+  onUpdateSpec?: (newSpec: Spec) => void;
 }
 
 const fallback: ComponentRenderer = ({ element }) => (
@@ -721,7 +733,12 @@ function RendererWithActions({
 export const ExplorerRenderer = memo(function ExplorerRenderer({
   spec,
   loading,
+  onUpdateSpec,
 }: ExplorerRendererProps): ReactNode {
+  useEffect(() => {
+    console.log("ExplorerRenderer spec updated:", spec ? Object.keys(spec?.elements || {}).length : "null");
+  }, [spec]);
+
   // Sanitize → repair → deduplicate (memoized by spec reference)
   const safeSpec = useMemo(() => {
     if (!spec) return null;
@@ -730,13 +747,74 @@ export const ExplorerRenderer = memo(function ExplorerRenderer({
     return deduplicateSpec(repairSpec(sanitized));
   }, [spec]);
 
+  const [isEditing, setIsEditing] = useState(false);
+  const [editPosition, setEditPosition] = useState<{ top: number; right: number } | null>(null);
+
+  const handleEditClick = useCallback(() => {
+    // Position the editor at the top-right of the container
+    // We'll use CSS to position it relative to the container, or fixed if simpler.
+    // The requirement says: "pinned to the ui frame, where the left side of the text box is positioned at the top right corner of the ui frame"
+    // Let's try to just toggle editing mode.
+    setIsEditing(true);
+  }, []);
+
+  const handleEditSubmit = useCallback(async (prompt: string) => {
+    if (!safeSpec || !onUpdateSpec) return;
+
+    try {
+      const res = await fetch("/api/edit-ui", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ originalSpec: safeSpec, prompt }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: "Unknown error" }));
+        console.error("Edit UI failed:", errorData);
+        throw new Error(errorData.error || "Failed to edit UI");
+      }
+
+      const newSpec = await res.json();
+      onUpdateSpec(newSpec);
+      setIsEditing(false);
+    } catch (error) {
+      console.error(error);
+      // Ideally show a toast here
+    }
+  }, [safeSpec, onUpdateSpec]);
+
   if (!safeSpec || !safeSpec.root || !safeSpec.elements) return null;
 
-  return (
+  const content = (
     <LightboxProvider>
       <StateProvider initialState={safeSpec.state ?? {}}>
         <RendererWithActions spec={safeSpec} loading={loading} />
       </StateProvider>
     </LightboxProvider>
+  );
+
+  if (!onUpdateSpec) return content;
+
+  return (
+    <div className="relative group">
+      <ContextMenu>
+        <ContextMenuTrigger>
+          {content}
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onSelect={handleEditClick}>
+            Edit UI...
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+
+      {isEditing && (
+        <UIEditor
+          onCancel={() => setIsEditing(false)}
+          onSubmit={handleEditSubmit}
+          className="absolute top-4 right-4 w-auto"
+        />
+      )}
+    </div>
   );
 });
