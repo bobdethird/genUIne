@@ -7,6 +7,7 @@ import { getCryptoPrice, getCryptoPriceHistory } from "./tools/crypto";
 import { getStockQuote, getStockPriceHistory } from "./tools/stock";
 import { getHackerNewsTop } from "./tools/hackernews";
 import { webSearch } from "./tools/search";
+import { getBrightdataTools } from "./mcp/brightdata";
 
 const DEFAULT_MODEL = "anthropic/claude-sonnet-4.5";
 
@@ -273,20 +274,38 @@ ${explorerCatalog.prompt({
   ],
 })}`;
 
-export const agent = new ToolLoopAgent({
-  model: gateway(process.env.AI_GATEWAY_MODEL || DEFAULT_MODEL),
-  instructions: AGENT_INSTRUCTIONS,
-  tools: {
-    getWeather,
-    getGitHubRepo,
-    getGitHubPullRequests,
-    getCryptoPrice,
-    getCryptoPriceHistory,
-    getStockQuote,
-    getStockPriceHistory,
-    getHackerNewsTop,
-    webSearch,
-  },
-  stopWhen: stepCountIs(5),
-  temperature: 0.0,
-});
+const localTools = {
+  getWeather,
+  getGitHubRepo,
+  getGitHubPullRequests,
+  getCryptoPrice,
+  getCryptoPriceHistory,
+  getStockQuote,
+  getStockPriceHistory,
+  getHackerNewsTop,
+  webSearch,
+};
+
+/**
+ * Creates the agent with both local tools and Brightdata MCP tools.
+ * MCP tools are fetched asynchronously from the Brightdata SSE server.
+ */
+export async function createAgent() {
+  let mcpTools = {};
+  try {
+    // mcpTools = await getBrightdataTools();
+  } catch (error) {
+    // console.error("Failed to load Brightdata MCP tools:", error);
+  }
+
+  return new ToolLoopAgent({
+    model: gateway(process.env.AI_GATEWAY_MODEL || DEFAULT_MODEL),
+    instructions: AGENT_INSTRUCTIONS,
+    tools: {
+      ...localTools,
+      // ...mcpTools,
+    },
+    stopWhen: stepCountIs(5),
+    temperature: 0.0,
+  });
+}

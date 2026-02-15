@@ -1,4 +1,4 @@
-import { agent } from "@/lib/agent";
+import { createAgent } from "@/lib/agent";
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -7,7 +7,7 @@ import {
 } from "ai";
 import { pipeJsonRender } from "@json-render/core";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 export async function POST(req: Request) {
   const body = await req.json();
@@ -23,6 +23,7 @@ export async function POST(req: Request) {
     );
   }
 
+  const agent = await createAgent();
   const modelMessages = await convertToModelMessages(uiMessages);
   const result = await agent.stream({ messages: modelMessages });
 
