@@ -23,7 +23,7 @@ export async function searchExa(query: string, limit: number = 10): Promise<ExaR
                 "x-api-key": apiKey,
             },
             body: JSON.stringify({
-                query: `${query} buy shopping product`,
+                query: `${query} "price" "add to cart" -category -list -best -top`,
                 numResults: limit,
                 useAutoprompt: true,
                 contents: {

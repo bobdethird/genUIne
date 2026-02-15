@@ -800,8 +800,7 @@ export default function ChatPage() {
                       >
                         <div className="font-medium truncate">{item.summary}</div>
                       </div>
-                    );
-                })}
+                    ))}
                   </div>
 
                   <Button variant="outline" size="icon" className="h-10 w-10 rounded-full shadow-lg bg-background">
@@ -911,7 +910,7 @@ export default function ChatPage() {
                       if (!isLast) return null;
                       const rawPrompt = extractPromptFromMessage(message);
                       return (
-                        <OutputBlock key={message.id} rawPrompt={rawPrompt}>
+                        <OutputBlock key={message.id} rawPrompt={rawPrompt} aiTitle={aiTitles[rawPrompt.trim()]}>
                           <div className="text-sm text-muted-foreground animate-shimmer">Thinking...</div>
                         </OutputBlock>
                       );
@@ -921,7 +920,7 @@ export default function ChatPage() {
                       ? extractPromptFromMessage(userMsg)
                       : "";
                     return (
-                      <OutputBlock key={message.id} rawPrompt={rawPrompt}>
+                      <OutputBlock key={message.id} rawPrompt={rawPrompt} aiTitle={aiTitles[rawPrompt.trim()]}>
                         <MessageBubble
                           message={message}
                           isLast={index === displayedMessages.length - 1}
