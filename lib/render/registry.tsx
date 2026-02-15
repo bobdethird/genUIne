@@ -104,6 +104,7 @@ const LazyPointLight = lazy(() => lazy3D().then(m => ({ default: m.PointLightInn
 const LazyDirectionalLight = lazy(() => lazy3D().then(m => ({ default: m.DirectionalLightInner })));
 const LazyStars = lazy(() => lazy3D().then(m => ({ default: m.StarsInner })));
 const LazyLabel3D = lazy(() => lazy3D().then(m => ({ default: m.Label3DInner })));
+const LazyModel3D = lazy(() => lazy3D().then(m => ({ default: m.ModelInner })));
 
 import type { Group } from "three";
 import { Billboard, Text as DreiText } from "@react-three/drei";
@@ -255,8 +256,8 @@ export const { registry, handlers } = defineRegistry(explorerCatalog, {
         ? rawData
         : Array.isArray((rawData as Record<string, unknown>)?.data)
           ? ((rawData as Record<string, unknown>).data as Array<
-              Record<string, unknown>
-            >)
+            Record<string, unknown>
+          >)
           : [];
 
       // Deduplicate rows — LLM patch ordering can produce duplicate entries
@@ -291,18 +292,18 @@ export const { registry, handlers } = defineRegistry(explorerCatalog, {
 
       const sorted = sortKey
         ? [...items].sort((a, b) => {
-            const av = a[sortKey];
-            const bv = b[sortKey];
-            // numeric comparison when both values are numbers
-            if (typeof av === "number" && typeof bv === "number") {
-              return sortDir === "asc" ? av - bv : bv - av;
-            }
-            const as = String(av ?? "");
-            const bs = String(bv ?? "");
-            return sortDir === "asc"
-              ? as.localeCompare(bs)
-              : bs.localeCompare(as);
-          })
+          const av = a[sortKey];
+          const bv = b[sortKey];
+          // numeric comparison when both values are numbers
+          if (typeof av === "number" && typeof bv === "number") {
+            return sortDir === "asc" ? av - bv : bv - av;
+          }
+          const as = String(av ?? "");
+          const bs = String(bv ?? "");
+          return sortDir === "asc"
+            ? as.localeCompare(bs)
+            : bs.localeCompare(as);
+        })
         : items;
 
       const handleSort = (key: string) => {
@@ -1183,11 +1184,11 @@ export const { registry, handlers } = defineRegistry(explorerCatalog, {
       const pathD =
         trajectory.length > 0
           ? trajectory
-              .map((p, i) => {
-                const { x, y } = toSvg(p.x, p.y);
-                return `${i === 0 ? "M" : "L"} ${x} ${y}`;
-              })
-              .join(" ")
+            .map((p, i) => {
+              const { x, y } = toSvg(p.x, p.y);
+              return `${i === 0 ? "M" : "L"} ${x} ${y}`;
+            })
+            .join(" ")
           : "";
 
       const tickCountX = 6;
@@ -1271,339 +1272,339 @@ export const { registry, handlers } = defineRegistry(explorerCatalog, {
               </div>
               <div className="flex-1 min-w-0 rounded-lg border bg-background min-h-[280px] flex flex-col">
                 <div className="flex-1 min-h-[280px] w-full overflow-hidden">
-              <svg
-                viewBox="0 0 100 100"
-                preserveAspectRatio="xMidYMid meet"
-                className="w-full h-full block"
-                style={{ minHeight: 280 }}
-              >
-                {/* Plot area clip */}
-                <defs>
-                  <clipPath id="projectile-plot-clip">
-                    <rect x={plotLeft} y={plotTop} width={plotW} height={plotH} />
-                  </clipPath>
-                  <marker
-                    id="projectile-arrowhead"
-                    markerWidth="8"
-                    markerHeight="6"
-                    refX="7"
-                    refY="3"
-                    orient="auto"
+                  <svg
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="xMidYMid meet"
+                    className="w-full h-full block"
+                    style={{ minHeight: 280 }}
                   >
-                    <path d="M0,0 L8,3 L0,6 Z" fill="var(--chart-1)" />
-                  </marker>
-                  <marker
-                    id="projectile-velocity-arrowhead"
-                    markerWidth="8"
-                    markerHeight="6"
-                    refX="7"
-                    refY="3"
-                    orient="auto"
-                  >
-                    <path d="M0,0 L8,3 L0,6 Z" fill="var(--chart-2)" />
-                  </marker>
-                  <marker
-                    id="projectile-component-arrowhead"
-                    markerWidth="6"
-                    markerHeight="4.5"
-                    refX="5"
-                    refY="2.25"
-                    orient="auto"
-                  >
-                    <path d="M0,0 L6,2.25 L0,4.5 Z" fill="var(--muted-foreground)" fillOpacity="0.85" />
-                  </marker>
-                </defs>
+                    {/* Plot area clip */}
+                    <defs>
+                      <clipPath id="projectile-plot-clip">
+                        <rect x={plotLeft} y={plotTop} width={plotW} height={plotH} />
+                      </clipPath>
+                      <marker
+                        id="projectile-arrowhead"
+                        markerWidth="8"
+                        markerHeight="6"
+                        refX="7"
+                        refY="3"
+                        orient="auto"
+                      >
+                        <path d="M0,0 L8,3 L0,6 Z" fill="var(--chart-1)" />
+                      </marker>
+                      <marker
+                        id="projectile-velocity-arrowhead"
+                        markerWidth="8"
+                        markerHeight="6"
+                        refX="7"
+                        refY="3"
+                        orient="auto"
+                      >
+                        <path d="M0,0 L8,3 L0,6 Z" fill="var(--chart-2)" />
+                      </marker>
+                      <marker
+                        id="projectile-component-arrowhead"
+                        markerWidth="6"
+                        markerHeight="4.5"
+                        refX="5"
+                        refY="2.25"
+                        orient="auto"
+                      >
+                        <path d="M0,0 L6,2.25 L0,4.5 Z" fill="var(--muted-foreground)" fillOpacity="0.85" />
+                      </marker>
+                    </defs>
 
-                {/* Grid lines (within plot) */}
-                {ticksX.slice(1, -1).map((val, i) => {
-                  const { x } = toSvg(val, 0);
-                  return (
+                    {/* Grid lines (within plot) */}
+                    {ticksX.slice(1, -1).map((val, i) => {
+                      const { x } = toSvg(val, 0);
+                      return (
+                        <line
+                          key={`gv-${i}`}
+                          x1={x}
+                          y1={plotTop}
+                          x2={x}
+                          y2={plotBottom}
+                          stroke="var(--border)"
+                          strokeWidth={0.25}
+                          strokeDasharray="1.5 1.5"
+                        />
+                      );
+                    })}
+                    {ticksY.slice(1, -1).map((val, i) => {
+                      const { y } = toSvg(0, val);
+                      return (
+                        <line
+                          key={`gh-${i}`}
+                          x1={plotLeft}
+                          y1={y}
+                          x2={plotRight}
+                          y2={y}
+                          stroke="var(--border)"
+                          strokeWidth={0.25}
+                          strokeDasharray="1.5 1.5"
+                        />
+                      );
+                    })}
+
+                    {/* Axes */}
                     <line
-                      key={`gv-${i}`}
-                      x1={x}
-                      y1={plotTop}
-                      x2={x}
-                      y2={plotBottom}
-                      stroke="var(--border)"
-                      strokeWidth={0.25}
-                      strokeDasharray="1.5 1.5"
-                    />
-                  );
-                })}
-                {ticksY.slice(1, -1).map((val, i) => {
-                  const { y } = toSvg(0, val);
-                  return (
-                    <line
-                      key={`gh-${i}`}
                       x1={plotLeft}
-                      y1={y}
+                      y1={plotBottom}
                       x2={plotRight}
-                      y2={y}
-                      stroke="var(--border)"
-                      strokeWidth={0.25}
-                      strokeDasharray="1.5 1.5"
-                    />
-                  );
-                })}
-
-                {/* Axes */}
-                <line
-                  x1={plotLeft}
-                  y1={plotBottom}
-                  x2={plotRight}
-                  y2={plotBottom}
-                  stroke="var(--foreground)"
-                  strokeWidth={0.5}
-                />
-                <line
-                  x1={plotLeft}
-                  y1={plotBottom}
-                  x2={plotLeft}
-                  y2={plotTop}
-                  stroke="var(--foreground)"
-                  strokeWidth={0.5}
-                />
-
-                {/* Axis ticks and labels */}
-                {ticksX.map((val, i) => {
-                  const { x } = toSvg(val, 0);
-                  return (
-                    <g key={`tx-${i}`}>
-                      <line
-                        x1={x}
-                        y1={plotBottom}
-                        x2={x}
-                        y2={plotBottom + 1.2}
-                        stroke="var(--foreground)"
-                        strokeWidth={0.4}
-                      />
-                      <text
-                        x={x}
-                        y={plotBottom + 4}
-                        fontSize={2.5}
-                        fill="var(--muted-foreground)"
-                        textAnchor="middle"
-                      >
-                        {Number.isInteger(val) ? val : val.toFixed(1)}
-                      </text>
-                    </g>
-                  );
-                })}
-                {ticksY.map((val, i) => {
-                  const { y } = toSvg(0, val);
-                  return (
-                    <g key={`ty-${i}`}>
-                      <line
-                        x1={plotLeft}
-                        y1={y}
-                        x2={plotLeft - 1.2}
-                        y2={y}
-                        stroke="var(--foreground)"
-                        strokeWidth={0.4}
-                      />
-                      <text
-                        x={plotLeft - 2}
-                        y={y + 1}
-                        fontSize={2.5}
-                        fill="var(--muted-foreground)"
-                        textAnchor="end"
-                      >
-                        {Number.isInteger(val) ? val : val.toFixed(1)}
-                      </text>
-                    </g>
-                  );
-                })}
-
-                {/* Axis titles - equal offset from each axis, clear of tick labels */}
-                {(() => {
-                  const axisTitleOffset = 9;
-                  const plotMidY = (plotTop + plotBottom) / 2;
-                  return (
-                    <>
-                      <text
-                        x={(plotLeft + plotRight) / 2}
-                        y={plotBottom + axisTitleOffset}
-                        fontSize={2.8}
-                        fill="var(--muted-foreground)"
-                        textAnchor="middle"
-                        fontWeight="500"
-                      >
-                        Distance (m)
-                      </text>
-                      <text
-                        x={plotLeft - axisTitleOffset}
-                        y={plotMidY}
-                        fontSize={2.8}
-                        fill="var(--muted-foreground)"
-                        textAnchor="middle"
-                        fontWeight="500"
-                        transform={`rotate(-90, ${plotLeft - axisTitleOffset}, ${plotMidY})`}
-                      >
-                        Height (m)
-                      </text>
-                    </>
-                  );
-                })()}
-
-                {/* Trajectory (clipped to plot) */}
-                <g clipPath="url(#projectile-plot-clip)">
-                  {pathD && (
-                    <path
-                      d={pathD}
-                      fill="none"
-                      stroke="var(--chart-1)"
-                      strokeWidth={0.9}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  )}
-                  {/* Component and total velocity arrows + labels */}
-                  {(() => {
-                    const showAt = position ?? (trajectory[0] ? { x: trajectory[0].x, y: trajectory[0].y } : null);
-                    const t = currentTime;
-                    const vel = velocityAt(t);
-                    const vmag = Math.sqrt(vel.vx * vel.vx + vel.vy * vel.vy);
-                    if (!showAt) return null;
-                    const { x: sx, y: sy } = toSvg(showAt.x, showAt.y);
-                    const compSeg = Math.min(plotW, plotH) * 0.22;
-                    const scale = v0 > 0.1 ? compSeg / v0 : 0;
-                    const vxEndX = sx + vel.vx * scale;
-                    const vxEndY = sy;
-                    const vyEndX = sx;
-                    const vyEndY = sy - vel.vy * scale;
-
-                    const seg = Math.min(arrowLen, plotW * 0.2);
-                    const ux = vmag > 0.1 ? vel.vx / vmag : 0;
-                    const uy = vmag > 0.1 ? vel.vy / vmag : 0;
-                    const ex = sx + ux * seg;
-                    const ey = sy - uy * seg;
-
-                    const labelOff = 1.5;
-                    const fontSize = 2.2;
-
-                    return (
-                      <g>
-                        {/* vₓ component (horizontal, lighter) */}
-                        {Math.abs(vel.vx) > 0.08 && (
-                          <>
-                            <line
-                              x1={sx}
-                              y1={sy}
-                              x2={vxEndX}
-                              y2={vxEndY}
-                              stroke="var(--muted-foreground)"
-                              strokeOpacity={0.75}
-                              strokeWidth={0.5}
-                              markerEnd="url(#projectile-component-arrowhead)"
-                            />
-                            <text
-                              x={vxEndX + (vel.vx >= 0 ? labelOff : -labelOff)}
-                              y={sy + 1}
-                              fontSize={fontSize}
-                              fill="var(--muted-foreground)"
-                              textAnchor={vel.vx >= 0 ? "start" : "end"}
-                              opacity={0.9}
-                            >
-                              vₓ
-                            </text>
-                          </>
-                        )}
-                        {/* vᵧ component (vertical, lighter) */}
-                        {Math.abs(vel.vy) > 0.08 && (
-                          <>
-                            <line
-                              x1={sx}
-                              y1={sy}
-                              x2={vyEndX}
-                              y2={vyEndY}
-                              stroke="var(--muted-foreground)"
-                              strokeOpacity={0.75}
-                              strokeWidth={0.5}
-                              markerEnd="url(#projectile-component-arrowhead)"
-                            />
-                            <text
-                              x={vyEndX + labelOff}
-                              y={vyEndY + (vel.vy >= 0 ? -labelOff : labelOff)}
-                              fontSize={fontSize}
-                              fill="var(--muted-foreground)"
-                              textAnchor="start"
-                              opacity={0.9}
-                            >
-                              vᵧ
-                            </text>
-                          </>
-                        )}
-                        {/* Total velocity v (darker) */}
-                        {vmag > 0.1 && (
-                          <>
-                            <line
-                              x1={sx}
-                              y1={sy}
-                              x2={ex}
-                              y2={ey}
-                              stroke="var(--chart-2)"
-                              strokeWidth={0.7}
-                              markerEnd="url(#projectile-velocity-arrowhead)"
-                            />
-                            <text
-                              x={ex + ux * labelOff}
-                              y={ey - uy * labelOff}
-                              fontSize={fontSize}
-                              fill="var(--chart-2)"
-                              textAnchor={ux >= 0 ? "start" : "end"}
-                              fontWeight="600"
-                            >
-                              v
-                            </text>
-                          </>
-                        )}
-                      </g>
-                    );
-                  })()}
-                  {/* Projectile dot */}
-                  {position && (
-                    <circle
-                      cx={toSvg(position.x, position.y).x}
-                      cy={toSvg(position.x, position.y).y}
-                      r={1.4}
-                      fill="var(--chart-1)"
-                      stroke="var(--background)"
+                      y2={plotBottom}
+                      stroke="var(--foreground)"
                       strokeWidth={0.5}
                     />
-                  )}
-                </g>
-              </svg>
+                    <line
+                      x1={plotLeft}
+                      y1={plotBottom}
+                      x2={plotLeft}
+                      y2={plotTop}
+                      stroke="var(--foreground)"
+                      strokeWidth={0.5}
+                    />
+
+                    {/* Axis ticks and labels */}
+                    {ticksX.map((val, i) => {
+                      const { x } = toSvg(val, 0);
+                      return (
+                        <g key={`tx-${i}`}>
+                          <line
+                            x1={x}
+                            y1={plotBottom}
+                            x2={x}
+                            y2={plotBottom + 1.2}
+                            stroke="var(--foreground)"
+                            strokeWidth={0.4}
+                          />
+                          <text
+                            x={x}
+                            y={plotBottom + 4}
+                            fontSize={2.5}
+                            fill="var(--muted-foreground)"
+                            textAnchor="middle"
+                          >
+                            {Number.isInteger(val) ? val : val.toFixed(1)}
+                          </text>
+                        </g>
+                      );
+                    })}
+                    {ticksY.map((val, i) => {
+                      const { y } = toSvg(0, val);
+                      return (
+                        <g key={`ty-${i}`}>
+                          <line
+                            x1={plotLeft}
+                            y1={y}
+                            x2={plotLeft - 1.2}
+                            y2={y}
+                            stroke="var(--foreground)"
+                            strokeWidth={0.4}
+                          />
+                          <text
+                            x={plotLeft - 2}
+                            y={y + 1}
+                            fontSize={2.5}
+                            fill="var(--muted-foreground)"
+                            textAnchor="end"
+                          >
+                            {Number.isInteger(val) ? val : val.toFixed(1)}
+                          </text>
+                        </g>
+                      );
+                    })}
+
+                    {/* Axis titles - equal offset from each axis, clear of tick labels */}
+                    {(() => {
+                      const axisTitleOffset = 9;
+                      const plotMidY = (plotTop + plotBottom) / 2;
+                      return (
+                        <>
+                          <text
+                            x={(plotLeft + plotRight) / 2}
+                            y={plotBottom + axisTitleOffset}
+                            fontSize={2.8}
+                            fill="var(--muted-foreground)"
+                            textAnchor="middle"
+                            fontWeight="500"
+                          >
+                            Distance (m)
+                          </text>
+                          <text
+                            x={plotLeft - axisTitleOffset}
+                            y={plotMidY}
+                            fontSize={2.8}
+                            fill="var(--muted-foreground)"
+                            textAnchor="middle"
+                            fontWeight="500"
+                            transform={`rotate(-90, ${plotLeft - axisTitleOffset}, ${plotMidY})`}
+                          >
+                            Height (m)
+                          </text>
+                        </>
+                      );
+                    })()}
+
+                    {/* Trajectory (clipped to plot) */}
+                    <g clipPath="url(#projectile-plot-clip)">
+                      {pathD && (
+                        <path
+                          d={pathD}
+                          fill="none"
+                          stroke="var(--chart-1)"
+                          strokeWidth={0.9}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      )}
+                      {/* Component and total velocity arrows + labels */}
+                      {(() => {
+                        const showAt = position ?? (trajectory[0] ? { x: trajectory[0].x, y: trajectory[0].y } : null);
+                        const t = currentTime;
+                        const vel = velocityAt(t);
+                        const vmag = Math.sqrt(vel.vx * vel.vx + vel.vy * vel.vy);
+                        if (!showAt) return null;
+                        const { x: sx, y: sy } = toSvg(showAt.x, showAt.y);
+                        const compSeg = Math.min(plotW, plotH) * 0.22;
+                        const scale = v0 > 0.1 ? compSeg / v0 : 0;
+                        const vxEndX = sx + vel.vx * scale;
+                        const vxEndY = sy;
+                        const vyEndX = sx;
+                        const vyEndY = sy - vel.vy * scale;
+
+                        const seg = Math.min(arrowLen, plotW * 0.2);
+                        const ux = vmag > 0.1 ? vel.vx / vmag : 0;
+                        const uy = vmag > 0.1 ? vel.vy / vmag : 0;
+                        const ex = sx + ux * seg;
+                        const ey = sy - uy * seg;
+
+                        const labelOff = 1.5;
+                        const fontSize = 2.2;
+
+                        return (
+                          <g>
+                            {/* vₓ component (horizontal, lighter) */}
+                            {Math.abs(vel.vx) > 0.08 && (
+                              <>
+                                <line
+                                  x1={sx}
+                                  y1={sy}
+                                  x2={vxEndX}
+                                  y2={vxEndY}
+                                  stroke="var(--muted-foreground)"
+                                  strokeOpacity={0.75}
+                                  strokeWidth={0.5}
+                                  markerEnd="url(#projectile-component-arrowhead)"
+                                />
+                                <text
+                                  x={vxEndX + (vel.vx >= 0 ? labelOff : -labelOff)}
+                                  y={sy + 1}
+                                  fontSize={fontSize}
+                                  fill="var(--muted-foreground)"
+                                  textAnchor={vel.vx >= 0 ? "start" : "end"}
+                                  opacity={0.9}
+                                >
+                                  vₓ
+                                </text>
+                              </>
+                            )}
+                            {/* vᵧ component (vertical, lighter) */}
+                            {Math.abs(vel.vy) > 0.08 && (
+                              <>
+                                <line
+                                  x1={sx}
+                                  y1={sy}
+                                  x2={vyEndX}
+                                  y2={vyEndY}
+                                  stroke="var(--muted-foreground)"
+                                  strokeOpacity={0.75}
+                                  strokeWidth={0.5}
+                                  markerEnd="url(#projectile-component-arrowhead)"
+                                />
+                                <text
+                                  x={vyEndX + labelOff}
+                                  y={vyEndY + (vel.vy >= 0 ? -labelOff : labelOff)}
+                                  fontSize={fontSize}
+                                  fill="var(--muted-foreground)"
+                                  textAnchor="start"
+                                  opacity={0.9}
+                                >
+                                  vᵧ
+                                </text>
+                              </>
+                            )}
+                            {/* Total velocity v (darker) */}
+                            {vmag > 0.1 && (
+                              <>
+                                <line
+                                  x1={sx}
+                                  y1={sy}
+                                  x2={ex}
+                                  y2={ey}
+                                  stroke="var(--chart-2)"
+                                  strokeWidth={0.7}
+                                  markerEnd="url(#projectile-velocity-arrowhead)"
+                                />
+                                <text
+                                  x={ex + ux * labelOff}
+                                  y={ey - uy * labelOff}
+                                  fontSize={fontSize}
+                                  fill="var(--chart-2)"
+                                  textAnchor={ux >= 0 ? "start" : "end"}
+                                  fontWeight="600"
+                                >
+                                  v
+                                </text>
+                              </>
+                            )}
+                          </g>
+                        );
+                      })()}
+                      {/* Projectile dot */}
+                      {position && (
+                        <circle
+                          cx={toSvg(position.x, position.y).x}
+                          cy={toSvg(position.x, position.y).y}
+                          r={1.4}
+                          fill="var(--chart-1)"
+                          stroke="var(--background)"
+                          strokeWidth={0.5}
+                        />
+                      )}
+                    </g>
+                  </svg>
                 </div>
-              {trajectory.length > 0 && totalTime > 0 && (
-                <div className="flex-shrink-0 border-t border-border bg-muted/40 px-4 py-3 flex items-center gap-3 min-h-[48px]">
-                  <span className="text-xs font-medium text-muted-foreground shrink-0 whitespace-nowrap">
-                    Timeline
-                  </span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={totalTime}
-                    step={0.05}
-                    value={Math.min(currentTime, totalTime)}
-                    className="flex-1 h-3 w-full min-w-0 accent-primary cursor-pointer"
-                    onInput={(e) => {
-                      const t = parseFloat((e.target as HTMLInputElement).value);
-                      setCurrentTime(t);
-                      const p = getPositionAtTime(t);
-                      if (p) setPosition(p);
-                    }}
-                    onPointerDown={() => {
-                      setPaused(true);
-                      setDragging(true);
-                    }}
-                    onPointerUp={() => setDragging(false)}
-                    onPointerLeave={() => dragging && setDragging(false)}
-                  />
-                  <span className="text-sm tabular-nums text-foreground shrink-0 w-16 text-right font-medium">
-                    {currentTime.toFixed(2)} s
-                  </span>
-                </div>
-              )}
+                {trajectory.length > 0 && totalTime > 0 && (
+                  <div className="flex-shrink-0 border-t border-border bg-muted/40 px-4 py-3 flex items-center gap-3 min-h-[48px]">
+                    <span className="text-xs font-medium text-muted-foreground shrink-0 whitespace-nowrap">
+                      Timeline
+                    </span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={totalTime}
+                      step={0.05}
+                      value={Math.min(currentTime, totalTime)}
+                      className="flex-1 h-3 w-full min-w-0 accent-primary cursor-pointer"
+                      onInput={(e) => {
+                        const t = parseFloat((e.target as HTMLInputElement).value);
+                        setCurrentTime(t);
+                        const p = getPositionAtTime(t);
+                        if (p) setPosition(p);
+                      }}
+                      onPointerDown={() => {
+                        setPaused(true);
+                        setDragging(true);
+                      }}
+                      onPointerUp={() => setDragging(false)}
+                      onPointerLeave={() => dragging && setDragging(false)}
+                    />
+                    <span className="text-sm tabular-nums text-foreground shrink-0 w-16 text-right font-medium">
+                      {currentTime.toFixed(2)} s
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
             <p className="text-xs text-muted-foreground mt-3">
@@ -1632,6 +1633,16 @@ export const { registry, handlers } = defineRegistry(explorerCatalog, {
     // =========================================================================
     // 3D Scene Components — lazy-loaded (three.js + R3F ~500KB only when needed)
     // =========================================================================
+
+    Model3D: ({ props, emit }) => (
+      <Suspense fallback={null}>
+        <LazyModel3D
+          url={(props as any).url}
+          props={props as any}
+          onClick={() => emit("press")}
+        />
+      </Suspense>
+    ),
 
     Scene3D: ({ props, children }) => (
       <Suspense fallback={<Skeleton className="w-full h-[400px] rounded-lg" />}>

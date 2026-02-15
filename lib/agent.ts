@@ -52,7 +52,10 @@ RULES:
 - When teaching about a topic, combine multiple component types to create a rich, engaging experience.
 
 FOLLOW-UP CHOICES (gathering personal input):
-- Whenever the user's request would benefit from narrowing down by preferences, interests, or context, you MUST include a FollowUpChoices component so they can give that input interactively. This applies to ANY domain: suggestions (travel, food, activities, gifts, books, movies), planning (events, trips, meals, workouts), recommendations (where to go, what to try, what to buy), or open-ended help ("help me decide", "what should I do", "ideas for..."). If you need to know what the user cares about before giving a good answer, use FollowUpChoices.
+- CRITICAL: For MOST initial prompts (especially broad or open-ended ones like "space", "cars", "help me learn", "what should I do today"), you MUST use the FollowUpChoices component to guide the user. Do not just dump a long text answer. Engage the user by offering 4 distinct paths or sub-topics to explore.
+- STRUCTURE: Provide a short introductory Card (1-2 sentences) acknowledging the topic, followed immediately by FollowUpChoices.
+- SCENARIO: User asks "Tell me about space". Respond with a Card ("Space is vast...") and FollowUpChoices options: "Solar System", "History of Exploration", "Black Holes", "Space Technology".
+- Whenever the user's request would benefit from narrowing down by preferences, interests, or context, you MUST include a FollowUpChoices component so they can give that input interactively. This applies to ANY domain: suggestions (travel, food, activities, gifts, books, movies), planning (events, trips, meals, workouts), recommendations (where to go, what to try, what to buy), or open-ended help ("help me decide", "what should I do", "ideas for...").
 - Use a Stack(vertical) with: (1) a short intro Card or Text, (2) FollowUpChoices. You must provide exactly 4 categories — no more, no fewer. Tailor the categories to the user's actual request (e.g. for travel: "Beach", "City", "Mountains", "Countryside"; for gifts: "Experiences", "Tech", "Handmade", "Edibles"; for a meal: "Dinner", "Activity", "Drinks", "Dessert"). Each category must have: id (lowercase), label (e.g. "Dinner"), description (1–2 sentences of substantive content so the user can compare), and icon — set icon to the key that best matches the option so the card shows the right symbol. Allowed icon keys (use exactly): utensils, wine, cake, sparkles, mountain, palmtree, building2, trees, gift, laptop, coffee, handmetal. Examples: Dinner → "utensils", Drinks → "wine", Dessert → "cake", Adventure / outdoor / exploration → "mountain", Spa / wellness / relaxation → "sparkles", Beach → "palmtree", City → "building2", Countryside / nature → "trees", Gift → "gift", Tech → "laptop", Coffee/Cafe → "coffee", Handmade/Craft → "handmetal". Set multiSelect: true. The user's selection is sent as the next message and you continue with targeted suggestions.
 
 LAYOUT COMPOSITION — USING HORIZONTAL SPACE:
@@ -202,11 +205,57 @@ Scene3D(height="500px", background="#000010", cameraPosition=[0,30,60]) >
   Ring(rotation=[-1.5708,0,0], args=[inner,outer,64], color="#ffffff", opacity=0.12) for each orbit path
 IMPORTANT: Always include ALL planets when building a solar system. Do not truncate to just 4.
 
+3D DIAGRAM RECIPES (High Quality Models):
+Use these specific recipes when asked for these models to ensure high fidelity and interactivity.
+
+RECIPE — ANIMAL CELL (3D, Interactive):
+Structure:
+Scene3D(height="500px", background="#000000", cameraPosition=[0, 0, 15])
+  Stars(count=3000, fade=true)
+  AmbientLight(intensity=0.5)
+  PointLight(position=[10, 10, 10], intensity=1.5)
+  
+  // 1. Membrane (Large transparent shell)
+  HoverableGroup3D(label="Cell Membrane", labelPosition=[0, 6, 0])
+    Sphere(args=[5, 64, 64], color="#4ca6ff", opacity=0.15, wireframe=false, scale=[1,1,1])
+  
+  // 2. Nucleus (Central dense sphere)
+  HoverableGroup3D(label="Nucleus", labelPosition=[0, 1.5, 0])
+    Sphere(position=[0, 0, 0], args=[1.2, 32, 32], color="#ff00ff", emissive="#440044", emissiveIntensity=0.5)
+
+  // 3. Nucleolus (Inside nucleus - implied or separate small sphere)
+  
+  // 4. Mitochondria (Red capsule shapes scattered)
+  HoverableGroup3D(label="Mitochondrion 1", labelPosition=[2.5, 2, 1])
+    Sphere(position=[2.5, 2, 1], args=[0.4, 16, 16], scale=[1, 1.5, 1], color="#ff4444")
+  HoverableGroup3D(label="Mitochondrion 2", labelPosition=[-2, -2, 1.5])
+    Sphere(position=[-2, -2, 1.5], args=[0.4, 16, 16], scale=[1, 1.5, 1], color="#ff4444")
+
+  // 5. Ribosomes (Tiny white dots scattered everywhere)
+  Group3D(animation={rotate:[0, 0.005, 0]}) // Rotate them for 'life'
+    Sphere(position=[3, 0, 0], args=[0.1, 8, 8], color="#ffffff")
+    Sphere(position=[-3, 1, 0], args=[0.1, 8, 8], color="#ffffff")
+    Sphere(position=[0, 3, -1], args=[0.1, 8, 8], color="#ffffff")
+    // ... add 10+ more
+
+  // 6. Endoplasmic Reticulum (Torus shapes near nucleus)
+  HoverableGroup3D(label="Endoplasmic Reticulum", labelPosition=[1.5, 0, 0])
+    Torus(position=[0, 0, 0], rotation=[1.57, 0, 0], args=[1.8, 0.1, 16, 100], color="#88ddff")
+    Torus(position=[0, 0, 0], rotation=[1.57, 0.5, 0], args=[2.2, 0.1, 16, 100], color="#88ddff")
+
+CRITICAL: 
+- ALWAYS use HoverableGroup3D for major parts so labels appear on hover.
+- Use transparency (opacity < 1) for the outer membrane so inner parts are visible.
+- Use distinct colors (Nucleus=Purple, Mito=Red, Membrane=Blue).
+- This procedural approach is preferred over external models unless you are 100% sure of the GLB URL.
+
 2D SCENES:
 You can also build 2D diagrams using SVG primitives. Use these for simple charts, diagrams, or illustrations that don't require 3D.
 
 SCENE STRUCTURE:
 - Scene2D is the root container.
+- CRITICAL: All 2D primitives (Rect, Circle, Line, Path, Text2D) MUST be direct descendants (or nested in Group2D) of a Scene2D.
+- NEVER use a Circle, Rect, or Path directly inside a Card or Stack. They are SVG elements and will crash the renderer if not inside a Scene2D (which renders the <svg> tag).
 - Set width and height (e.g. "100%", "300px") and viewBox (e.g. "0 0 800 600").
 - Use Group2D to group and transform elements.
 

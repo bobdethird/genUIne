@@ -6,6 +6,7 @@ import {
   OrbitControls,
   Stars as DreiStars,
   Text as DreiText,
+  useGLTF,
 } from "@react-three/drei";
 import type * as THREE from "three";
 
@@ -293,6 +294,35 @@ export function Label3DInner({ position, rotation, color, fontSize, anchorX, anc
       anchorY={(anchorY ?? "middle") as any}
     >
       {text}
+      {text}
     </DreiText>
+  );
+}
+
+export function ModelInner({
+  url,
+  props,
+  onClick,
+}: {
+  url: string;
+  props: Mesh3DProps;
+  onClick?: () => void;
+}) {
+  const { scene } = useGLTF(url);
+  const ref = useRef<any>(null);
+  // Clone to allow multiple instances with different transforms
+  const clone = scene.clone();
+
+  useRotationAnimation(ref as any, props.animation);
+
+  return (
+    <primitive
+      ref={ref}
+      object={clone}
+      position={toVec3(props.position)}
+      rotation={toVec3(props.rotation)}
+      scale={toVec3(props.scale)}
+      onClick={onClick}
+    />
   );
 }

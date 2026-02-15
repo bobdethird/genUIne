@@ -918,6 +918,21 @@ export const explorerCatalog = defineCatalog(schema, {
       },
     },
 
+    Model3D: {
+      props: z.object({
+        url: z.string(),
+        position: z.array(z.number()).nullable(),
+        rotation: z.array(z.number()).nullable(),
+        scale: z.array(z.number()).nullable(),
+        animation: z.object({ rotate: z.array(z.number()) }).nullable(),
+      }),
+      description: "Load a 3D model from a GLB/GLTF URL.",
+      example: {
+        url: "https://example.com/model.glb",
+        scale: [1, 1, 1],
+      },
+    },
+
     ...(followUpChoicesCatalogEntry as Record<
       string,
       { props: z.ZodTypeAny; slots: string[]; description: string; example: object }
