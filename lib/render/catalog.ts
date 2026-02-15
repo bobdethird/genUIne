@@ -470,6 +470,56 @@ export const explorerCatalog = defineCatalog(schema, {
     },
 
     // =========================================================================
+    // Map Components (Mapbox GL)
+    // =========================================================================
+
+    Map: {
+      props: z.object({
+        latitude: z.number(),
+        longitude: z.number(),
+        zoom: z.number().nullable(),
+        mapStyle: z
+          .enum([
+            "streets",
+            "outdoors",
+            "light",
+            "dark",
+            "satellite",
+            "satellite-streets",
+          ])
+          .nullable(),
+        markers: z
+          .array(
+            z.object({
+              latitude: z.number(),
+              longitude: z.number(),
+              label: z.string().nullable(),
+              color: z.string().nullable(),
+            }),
+          )
+          .nullable(),
+        height: z.string().nullable(),
+      }),
+      description:
+        "Interactive Mapbox map with optional markers and configurable style. Use for displaying geographic locations, directions, points of interest, and spatial data. Provide latitude and longitude for the map center. Use markers to pin specific locations with optional labels and colors. mapStyle controls the visual theme: 'streets' for city/address views, 'satellite' for terrain/nature, 'dark' for dark-themed dashboards.",
+      example: {
+        latitude: 37.7749,
+        longitude: -122.4194,
+        zoom: 12,
+        mapStyle: "streets",
+        markers: [
+          {
+            latitude: 37.7749,
+            longitude: -122.4194,
+            label: "San Francisco",
+            color: "#FF0000",
+          },
+        ],
+        height: null,
+      },
+    },
+
+    // =========================================================================
     // 3D Scene Components (React Three Fiber)
     // =========================================================================
 

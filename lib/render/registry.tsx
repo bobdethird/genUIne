@@ -2,6 +2,12 @@
 
 import { useState, useRef, type ReactNode } from "react";
 import { useBoundProp, defineRegistry } from "@json-render/react";
+import ReactMapGL, {
+  Marker as MapboxMarker,
+  Popup as MapboxPopup,
+  NavigationControl,
+} from "react-map-gl/mapbox";
+import "mapbox-gl/dist/mapbox-gl.css";
 import {
   Bar,
   BarChart as RechartsBarChart,
@@ -1132,6 +1138,93 @@ export const { registry, handlers } = defineRegistry(explorerCatalog, {
     ),
 
     // =========================================================================
+    // Map Components (Mapbox GL)
+    // =========================================================================
+
+    Map: ({ props }) => {
+      const [popupInfo, setPopupInfo] = useState<{
+        latitude: number;
+        longitude: number;
+        label: string;
+      } | null>(null);
+
+      const mapStyle = MAPBOX_STYLES[props.mapStyle ?? "streets"] ?? MAPBOX_STYLES.streets;
+
+      const markers = Array.isArray(props.markers) ? props.markers : [];
+
+      return (
+        <div
+          style={{
+            height: props.height ?? "400px",
+            width: "100%",
+            borderRadius: 8,
+            overflow: "hidden",
+          }}
+        >
+          <ReactMapGL
+            initialViewState={{
+              latitude: props.latitude,
+              longitude: props.longitude,
+              zoom: props.zoom ?? 10,
+            }}
+            mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_API_KEY}
+            mapStyle={mapStyle}
+            style={{ width: "100%", height: "100%" }}
+          >
+            <NavigationControl position="top-right" />
+            {markers.map((marker, i) => {
+              const m = marker as Record<string, unknown>;
+              const lat = (m.latitude ?? m.lat) as number;
+              const lng = (m.longitude ?? m.lng ?? m.lon) as number;
+              const label = (m.label ?? m.name ?? m.title) as string | null;
+              const color = (m.color as string) ?? "#EF4444";
+              return (
+                <MapboxMarker
+                  key={i}
+                  latitude={lat}
+                  longitude={lng}
+                  anchor="bottom"
+                  onClick={(e: { originalEvent: MouseEvent }) => {
+                    e.originalEvent.stopPropagation();
+                    if (label) setPopupInfo({ latitude: lat, longitude: lng, label });
+                  }}
+                >
+                  <svg
+                    width="24"
+                    height="36"
+                    viewBox="0 0 24 36"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M12 0C5.372 0 0 5.372 0 12c0 9 12 24 12 24s12-15 12-24c0-6.628-5.372-12-12-12z"
+                      fill={color}
+                    />
+                    <circle cx="12" cy="12" r="5" fill="white" />
+                  </svg>
+                </MapboxMarker>
+              );
+            })}
+            {popupInfo && (
+              <MapboxPopup
+                latitude={popupInfo.latitude}
+                longitude={popupInfo.longitude}
+                anchor="bottom"
+                offset={36}
+                onClose={() => setPopupInfo(null)}
+                closeOnClick={false}
+              >
+                <div className="text-sm font-medium text-foreground px-1">
+                  {popupInfo.label}
+                </div>
+              </MapboxPopup>
+            )}
+          </ReactMapGL>
+        </div>
+      );
+    },
+
+    // =========================================================================
     // 3D Scene Components
     // =========================================================================
 
@@ -1415,6 +1508,19 @@ function formatCellValue(value: unknown): string {
     return String(value);
   }
 }
+
+// =============================================================================
+// Mapbox Helpers
+// =============================================================================
+
+const MAPBOX_STYLES: Record<string, string> = {
+  streets: "mapbox://styles/mapbox/streets-v12",
+  outdoors: "mapbox://styles/mapbox/outdoors-v12",
+  light: "mapbox://styles/mapbox/light-v11",
+  dark: "mapbox://styles/mapbox/dark-v11",
+  satellite: "mapbox://styles/mapbox/satellite-v9",
+  "satellite-streets": "mapbox://styles/mapbox/satellite-streets-v12",
+};
 
 // =============================================================================
 // Chart Helpers

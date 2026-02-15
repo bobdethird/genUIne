@@ -317,6 +317,59 @@ function repairSpec(spec: Spec): Spec {
     changed = true;
   }
 
+  // ----- Map: normalize lat/lng/style and marker prop variations -----
+  for (const el of Object.values(elements)) {
+    if (el.type !== "Map") continue;
+    const p = el.props as Record<string, unknown>;
+
+    // Normalize lat/lng → latitude/longitude
+    if (p.lat != null && p.latitude == null) {
+      p.latitude = p.lat;
+      delete p.lat;
+      changed = true;
+    }
+    if ((p.lng ?? p.lon) != null && p.longitude == null) {
+      p.longitude = p.lng ?? p.lon;
+      delete p.lng;
+      delete p.lon;
+      changed = true;
+    }
+
+    // Normalize "style" → "mapStyle" (avoid collision with CSS style)
+    if (p.style != null && typeof p.style === "string" && p.mapStyle == null) {
+      p.mapStyle = p.style;
+      delete p.style;
+      changed = true;
+    }
+
+    // Normalize markers: ensure each marker uses latitude/longitude
+    if (Array.isArray(p.markers)) {
+      const markers = p.markers as Array<Record<string, unknown>>;
+      for (const m of markers) {
+        if (m.lat != null && m.latitude == null) {
+          m.latitude = m.lat;
+          delete m.lat;
+        }
+        if ((m.lng ?? m.lon) != null && m.longitude == null) {
+          m.longitude = m.lng ?? m.lon;
+          delete m.lng;
+          delete m.lon;
+        }
+        if (m.name != null && m.label == null) {
+          m.label = m.name;
+          delete m.name;
+        }
+        if (m.title != null && m.label == null) {
+          m.label = m.title;
+          delete m.title;
+        }
+      }
+      changed = true;
+    }
+
+    el.props = p;
+  }
+
   // ----- LineChart: normalize yKeys to { key, label?, color? } -----
   for (const el of Object.values(elements)) {
     if (el.type !== "LineChart" || !Array.isArray(el.props?.yKeys)) continue;
