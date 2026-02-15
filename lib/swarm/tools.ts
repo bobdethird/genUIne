@@ -112,7 +112,12 @@ export const stagehandActTool = tool(
             } else if (action === "act") {
                 // Autonomous Action
                 await stagehand.act(instructions);
-                result = { message: "Action completed successfully.", action: instructions };
+                const currentUrl = page.url();
+                result = {
+                    message: "Action completed successfully.",
+                    action: instructions,
+                    current_url: currentUrl
+                };
             } else {
                 // Observe
                 result = await stagehand.extract(
