@@ -361,7 +361,7 @@ export const explorerCatalog = defineCatalog(schema, {
         ),
       }),
       description:
-        "Vertical timeline showing ordered events, steps, or historical milestones",
+        "Vertical timeline showing ordered events, steps, or historical milestones. IMPORTANT: Timeline does NOT support children or nested elements. It only accepts an items array prop with flat objects containing {title, description, date, status}. For complex layouts with nested Cards, Stacks, and rich content, use a vertical Stack instead (direction='vertical', gap='lg'). Timeline is designed ONLY for simple milestone lists with text-only content.",
       example: {
         items: [
           {

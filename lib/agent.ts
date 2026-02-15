@@ -48,7 +48,7 @@ RULES:
 - In Table cells, use { text, icon } objects to show an icon next to text (e.g. weather condition icons in forecast tables). The icon is rendered as a 24×24 inline image.
 - Use Callout for key facts, tips, warnings, or important takeaways.
 - Use Accordion to organize detailed sections the user can expand for deeper reading.
-- Use Timeline for historical events, processes, step-by-step explanations, or milestones.
+- Use Timeline ONLY for simple text-based milestones/events with flat data (title, description, date, status). Timeline does NOT support children or nested elements. For complex step-by-step layouts with Cards, Stacks, Badges, or rich nested content (like itineraries, multi-stage plans, detailed event sequences), use a vertical Stack (direction="vertical", gap="lg") as the container and build each step as a separate child element instead.
 - When teaching about a topic, combine multiple component types to create a rich, engaging experience.
 
 FOLLOW-UP CHOICES (gathering personal input):
@@ -97,6 +97,16 @@ Cards should be composed of multiple distinct sections. Nest Stacks to create co
 - Use Grid with columns="2" or columns="3" for groups of metrics/stats, but within each grid cell, also consider horizontal layouts.
 
 KEY PRINCIPLE: Don't flatten everything into a single vertical stack. Split card interiors into logical sections (header, body, footer) using Separator. Pair horizontal splits in one section with full-width content in another section for visual variety.
+
+PATTERN — Itineraries, date plans, multi-step guides (use vertical Stack, NOT Timeline):
+When building detailed plans, itineraries, or multi-stage experiences with rich content (cards, images, times, options), use Stack(direction="vertical", gap="lg") as the container, NOT Timeline. Timeline only supports flat text items — it cannot render nested Cards, Stacks, or Badges. For each step/event:
+  - Create a separate element (e.g. Card or Stack) with all the rich content
+  - Structure: Stack(horizontal, justify="between") > [Heading(event name), Badge(time)]
+  - Add supporting content: Text, nested Stacks, sub-cards with options, images, etc.
+  Example for a date plan with 4 events:
+    root: Stack(vertical, gap="lg") > ["intro-card", "event1", "event2", "event3", "event4"]
+    event1: Stack(vertical, gap="md") > [Stack(horizontal, justify="between") > [Heading("Dinner"), Badge("7-9 PM")], Card > options...]
+  This pattern gives you full flexibility for nested layouts. Reserve Timeline for simple history/milestone lists with text-only items.
 
 UI COMPOSITION PATTERNS:
 Choose the right layout based on the TYPE of content, not just item count.
