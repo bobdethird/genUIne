@@ -1,5 +1,6 @@
 import { createAgent } from "@/lib/agent";
 import { startSwarm } from "@/lib/swarm/runner";
+import { getSolarSystemSpec } from "@/lib/solar-system-spec";
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -10,6 +11,21 @@ import { pipeJsonRender } from "@json-render/core";
 
 // Increase timeout for full stall
 export const maxDuration = 300; // 5 minutes
+
+const SOLAR_SYSTEM_INTENT =
+  /\b(solar\s+system|diagram\s+of\s+(the\s+)?solar\s+system|show\s+me\s+.*solar|solar\s+system\s+diagram)\b/i;
+
+function getLastUserMessageText(messages: UIMessage[]): string {
+  const userMessages = messages.filter((m) => m.role === "user");
+  const last = userMessages[userMessages.length - 1];
+  if (!last) return "";
+  const parts = (last as { parts?: Array<{ type?: string; text?: string }> }).parts;
+  if (Array.isArray(parts)) {
+    const textPart = parts.find((p) => p.type === "text");
+    if (textPart && typeof textPart.text === "string") return textPart.text;
+  }
+  return "";
+}
 
 export async function POST(req: Request) {
   const body = await req.json();
@@ -128,9 +144,36 @@ INSTRUCTION: Uses the above data to answer the user's request. If there are stru
     modelMessages = [...modelMessages, injectedSystemMessage];
   }
 
+  const lastUserText = getLastUserMessageText(uiMessages);
+  const useSolarShortcut = SOLAR_SYSTEM_INTENT.test(lastUserText.trim());
+
+  if (useSolarShortcut) {
+    const flatSpec = getSolarSystemSpec();
+    const textId = crypto.randomUUID?.() ?? `text-${Date.now()}`;
+    const intro =
+      "Here's an interactive solar system diagram. Hover over planets to see info.\n\n";
+
+    const stream = createUIMessageStream({
+      originalMessages: uiMessages,
+      execute: async ({ writer }) => {
+        writer.write({ type: "text-start", id: textId });
+        writer.write({ type: "text-delta", id: textId, delta: intro });
+        writer.write({ type: "text-end", id: textId });
+        writer.write({
+          type: "data-spec",
+          data: { type: "flat", spec: flatSpec },
+        });
+      },
+    });
+
+    return createUIMessageStreamResponse({ stream });
+  }
+
+
   const result = await agent.stream({ messages: modelMessages });
 
   const stream = createUIMessageStream({
+    originalMessages: uiMessages,
     execute: async ({ writer }) => {
       writer.merge(pipeJsonRender(result.toUIMessageStream()));
     },

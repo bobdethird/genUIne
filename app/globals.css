@@ -160,6 +160,20 @@ button {
   animation: fade-out-collapse 0.6s ease-out 0.3s forwards;
 }
 
+/* Final collapsed state (no animation) — used when viewing completed exchanges */
+.fade-out-collapsed {
+  overflow: hidden;
+  opacity: 0;
+  max-height: 0;
+  min-height: 0;
+  height: 0;
+  margin-bottom: -12px;
+  padding: 0;
+  border: none;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .animate-shimmer {
   background: linear-gradient(
     90deg,
@@ -171,5 +185,5 @@ button {
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  animation: shimmer 2s ease-in-out infinite;
+  animation: shimmer 3.5s ease-in-out infinite;
 }

@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { type UIMessage } from "ai";
 
 export type ChatSession = {
@@ -7,14 +7,19 @@ export type ChatSession = {
     title: string;
     messages: UIMessage[];
     updatedAt: number;
+    aiTitles?: Record<string, string>;
 };
 
 const STORAGE_KEY = "chatgpt-v2-chats";
+const SAVE_DEBOUNCE_MS = 2000; // only persist every 2s at most
 
 export function useLocalChat() {
     const [chats, setChats] = useState<ChatSession[]>([]);
     const [currentChatId, setCurrentChatId] = useState<string | null>(null);
     const [isLoaded, setIsLoaded] = useState(false);
+    const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const chatsRef = useRef(chats);
+    chatsRef.current = chats;
 
     // Load from localStorage on mount
     useEffect(() => {
@@ -30,11 +35,21 @@ export function useLocalChat() {
         setIsLoaded(true);
     }, []);
 
-    // Save to localStorage whenever chats change
+    // Debounced save to localStorage — avoids serializing on every streaming chunk
     useEffect(() => {
-        if (isLoaded) {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(chats));
-        }
+        if (!isLoaded) return;
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = setTimeout(() => {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(chatsRef.current));
+            } catch (e) {
+                // localStorage quota exceeded — silently fail
+                console.warn("Failed to save chats to localStorage:", e);
+            }
+        }, SAVE_DEBOUNCE_MS);
+        return () => {
+            if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        };
     }, [chats, isLoaded]);
 
     const createChat = useCallback(() => {
@@ -66,42 +81,6 @@ export function useLocalChat() {
             setChats((prev) =>
                 prev.map((chat) => {
                     if (chat.id === chatId) {
-                        // Generate a title if it's "New Chat" and we have a user message
-                        let title = chat.title;
-                        if (chat.title === "New Chat" && messages.length > 0) {
-                            const firstUserMsg = messages.find((m) => m.role === "user");
-                            if (firstUserMsg) {
-                                // Cast to any to access content safely if type definition is strict
-                                const content = (firstUserMsg as any).content;
-                                let title = "";
-
-                                if (typeof content === 'string') {
-                                    title = content;
-                                } else if (Array.isArray((firstUserMsg as any).parts)) {
-                                    const parts = (firstUserMsg as any).parts;
-                                    const textPart = parts.find((p: any) => p.type === 'text');
-                                    if (textPart) {
-                                        title = textPart.text;
-                                    }
-                                }
-
-                                if (title) {
-                                    // Truncate cleanly
-                                    //@ts-ignore
-                                    title = title.slice(0, 40);
-                                }
-
-                                if (title) {
-                                    // Updating the title only if we found valid text
-                                    return {
-                                        ...chat,
-                                        messages,
-                                        title,
-                                        updatedAt: Date.now(),
-                                    };
-                                }
-                            }
-                        }
                         return {
                             ...chat,
                             messages,
@@ -109,6 +88,30 @@ export function useLocalChat() {
                         };
                     }
                     return chat;
+                })
+            );
+        },
+        []
+    );
+
+    const updateChatTitle = useCallback(
+        (chatId: string, title: string) => {
+            setChats((prev) =>
+                prev.map((chat) =>
+                    chat.id === chatId ? { ...chat, title } : chat
+                )
+            );
+        },
+        []
+    );
+
+    const updateChatAiTitles = useCallback(
+        (chatId: string, updates: Record<string, string>) => {
+            setChats((prev) =>
+                prev.map((chat) => {
+                    if (chat.id !== chatId) return chat;
+                    const merged = { ...(chat.aiTitles ?? {}), ...updates };
+                    return { ...chat, aiTitles: merged };
                 })
             );
         },
@@ -123,6 +126,8 @@ export function useLocalChat() {
         selectChat,
         deleteChat,
         saveMessages,
+        updateChatTitle,
+        updateChatAiTitles,
         isLoaded,
         currentChat: chats.find((c) => c.id === currentChatId) || null,
     };

@@ -1,6 +1,7 @@
 import { defineCatalog } from "@json-render/core";
 import { schema } from "@json-render/react/schema";
 import { z } from "zod-v4";
+import { followUpChoicesCatalogEntry } from "@/lib/follow-up-choices";
 
 // =============================================================================
 // Shared 3D schemas
@@ -54,6 +55,7 @@ export const explorerCatalog = defineCatalog(schema, {
         justify: z
           .enum(["start", "center", "end", "between", "around"])
           .nullable(),
+        className: z.string().nullable(),
       }),
       slots: ["default"],
       description: "Flex container for layouts",
@@ -69,7 +71,7 @@ export const explorerCatalog = defineCatalog(schema, {
       }),
       slots: ["default"],
       description:
-        "Card container with optional title, description, and max-width constraint. maxWidth: xs=320px, sm=384px, md=448px, lg=512px, xl=576px, full=100%. centered: true horizontally centers the card via mx-auto.",
+        "Card container that wraps child elements (Stack, Metric, Separator, etc.) with visual grouping. Use as children of Grid for comparison layouts. ALWAYS define Card elements you reference — if Grid has children: ['a-card'], then 'a-card' MUST exist as a Card element with its own children array. maxWidth: xs=320px, sm=384px, md=448px, lg=512px, xl=576px, full=100%. centered: true horizontally centers via mx-auto.",
       example: {
         title: "Login",
         description: "Sign in to your account",
@@ -192,12 +194,35 @@ export const explorerCatalog = defineCatalog(schema, {
         size: z.enum(["sm", "default", "lg"]).nullable(),
       }),
       description:
-        "Rounded avatar/icon image with fallback text. Can be placed inside Card, Stack, or any container. Use for weather icons (from iconUrl), user avatars, logos, status icons, etc. fallback is 1-2 chars shown if image fails to load.",
+        "Small rounded icon for favicons, user avatars, logos, and status icons ONLY. Do NOT use Avatar for content images, thumbnails, or article previews — use Image instead. fallback is 1-2 chars shown if image fails to load.",
       example: {
         src: "https://www.accuweather.com/assets/images/weather-icons/v2a/1.svg",
         alt: "Sunny",
         fallback: "☀",
         size: "default",
+      },
+    },
+
+    Image: {
+      props: z.object({
+        src: z.string(),
+        alt: z.string(),
+        width: z.string().nullable(),
+        height: z.string().nullable(),
+        rounded: z.enum(["none", "sm", "md", "lg", "xl", "full"]).nullable(),
+        objectFit: z.enum(["cover", "contain", "fill", "none"]).nullable(),
+        align: z.enum(["left", "center", "right"]).nullable(),
+      }),
+      description:
+        "Displays an image from a URL. Use for content images, thumbnails, article previews, and search result images. Set width/height as CSS values (e.g. '100%', '200px'). rounded controls border-radius. objectFit controls how the image fills its container (default: cover). align controls horizontal self-alignment within a flex parent: 'right' pushes the image to the right via margin-left auto (useful inside Cards and vertical Stacks).",
+      example: {
+        src: "https://example.com/image.jpg",
+        alt: "Article preview",
+        width: "160px",
+        height: "120px",
+        rounded: "lg",
+        objectFit: "cover",
+        align: "right",
       },
     },
 
@@ -336,7 +361,7 @@ export const explorerCatalog = defineCatalog(schema, {
         ),
       }),
       description:
-        "Vertical timeline showing ordered events, steps, or historical milestones",
+        "Vertical timeline showing ordered events, steps, or historical milestones. IMPORTANT: Timeline does NOT support children or nested elements. It only accepts an items array prop with flat objects containing {title, description, date, status}. For complex layouts with nested Cards, Stacks, and rich content, use a vertical Stack instead (direction='vertical', gap='lg'). Timeline is designed ONLY for simple milestone lists with text-only content.",
       example: {
         items: [
           {
@@ -446,6 +471,94 @@ export const explorerCatalog = defineCatalog(schema, {
       },
     },
 
+    ProjectileSimulator: {
+      props: z.object({
+        gravity: z.number().nullable(),
+        initialVelocity: z.number().nullable(),
+        angle: z.number().nullable(),
+        height: z.number().nullable(),
+      }),
+      description:
+        'Interactive 2D projectile physics simulation. User can set gravity (m/s²), initial velocity (m/s), launch angle (degrees), and initial height (m). Use { "$bindState": "/path" } for each prop so the inputs are two-way bound. Renders a grid with axes and animates the projectile when the user clicks Launch. Use when the user asks for a projectile simulation, ballistics, or trajectory demo.',
+      example: {
+        gravity: { $bindState: "/gravity" },
+        initialVelocity: { $bindState: "/initialVelocity" },
+        angle: { $bindState: "/angle" },
+        height: { $bindState: "/height" },
+      },
+    },
+
+    // =========================================================================
+    // Map Components (Mapbox GL)
+    // =========================================================================
+
+    Map: {
+      props: z.object({
+        latitude: z.number(),
+        longitude: z.number(),
+        zoom: z.number().nullable(),
+        mapStyle: z
+          .enum([
+            "streets",
+            "outdoors",
+            "light",
+            "dark",
+            "satellite",
+            "satellite-streets",
+          ])
+          .nullable(),
+        markers: z
+          .array(
+            z.object({
+              latitude: z.number(),
+              longitude: z.number(),
+              label: z.string().nullable(),
+              color: z.string().nullable(),
+              description: z.string().nullable(),
+              address: z.string().nullable(),
+              rating: z.number().nullable(),
+              image: z.string().nullable(),
+              category: z.string().nullable(),
+            }),
+          )
+          .nullable(),
+        height: z.string().nullable(),
+      }),
+      description:
+        "Interactive Google Maps-style Mapbox map with a left-side overlay panel showing location cards. IMPORTANT: Before using this component, you MUST call geocodePlaces to get real latitude/longitude for the map center AND every marker. Every marker MUST have its own latitude and longitude — markers without coordinates will not render. markers[] supports: label, description, address, rating (0-5), image URL, category, color. mapStyle: 'streets' for city, 'satellite' for terrain, 'dark' for dashboards.",
+      example: {
+        latitude: 37.7862,
+        longitude: -122.4233,
+        zoom: 14,
+        mapStyle: "streets",
+        markers: [
+          {
+            latitude: 37.7888,
+            longitude: -122.4099,
+            label: "House of Prime Rib",
+            color: "#EF4444",
+            description: "Classic prime rib served tableside in an old-school setting.",
+            address: "1906 Van Ness Ave, San Francisco, CA",
+            rating: 4.5,
+            image: null,
+            category: "Restaurant",
+          },
+          {
+            latitude: 37.7835,
+            longitude: -122.4367,
+            label: "Nopa",
+            color: "#EF4444",
+            description: "Organic California cuisine in a lively setting.",
+            address: "560 Divisadero St, San Francisco, CA",
+            rating: 4.4,
+            image: null,
+            category: "Restaurant",
+          },
+        ],
+        height: null,
+      },
+    },
+
     // =========================================================================
     // 3D Scene Components (React Three Fiber)
     // =========================================================================
@@ -484,6 +597,26 @@ export const explorerCatalog = defineCatalog(schema, {
         rotation: null,
         scale: null,
         animation: { rotate: [0, 0.005, 0] },
+      },
+    },
+
+    HoverableGroup3D: {
+      props: z.object({
+        ...transform3DProps,
+        animation: animation3D,
+        label: z.string().nullable(),
+        labelPosition: vec3.nullable(),
+        labelFontSize: z.number().nullable(),
+        labelColor: z.string().nullable(),
+      }),
+      slots: ["default"],
+      description:
+        "3D group that shows an optional label only when the user hovers over its children. Use to label planets on hover. Pass label and labelPosition props.",
+      example: {
+        label: "Mercury",
+        labelPosition: [5, 0.6, 0],
+        labelFontSize: 0.4,
+        labelColor: "#ffffff",
       },
     },
 
@@ -635,6 +768,16 @@ export const explorerCatalog = defineCatalog(schema, {
         fontSize: 0.8,
       },
     },
+
+    PlanetInfoOverlay: {
+      props: z.object({
+        className: z.string().nullable(),
+      }),
+      description:
+        "Overlay that shows planet info from state (set by fetchPlanetInfo action). Place above Scene3D in a Stack. Reads /planetInfo from state.",
+      example: { className: null },
+    },
+
     // =========================================================================
     // 2D Scene Components (SVG)
     // =========================================================================
@@ -774,7 +917,17 @@ export const explorerCatalog = defineCatalog(schema, {
         fill: "#333",
       },
     },
+
+    ...(followUpChoicesCatalogEntry as Record<
+      string,
+      { props: z.ZodTypeAny; slots: string[]; description: string; example: object }
+    >),
   },
 
-  actions: {},
+  actions: {
+    fetchPlanetInfo: {
+      params: z.object({ planet: z.string() }),
+      description: "Fetch basic planet facts from API and set /planetInfo in state. Used by solar scene hover.",
+    },
+  },
 });

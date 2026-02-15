@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, memo, Fragment } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import {
@@ -48,7 +48,10 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { useLocalChat } from "@/lib/hooks/use-local-chat";
-import { MessageSquare, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
+import { PromptPill } from "@/components/prompt-pill";
+import { FollowUpProvider } from "@/lib/follow-up-choices";
+
 
 // =============================================================================
 // Types
@@ -61,7 +64,62 @@ type AppMessage = UIMessage<unknown, AppDataParts>;
 // Transport
 // =============================================================================
 
-const transport = new DefaultChatTransport({ api: "/api/chat" });
+/**
+ * Strip heavy spec-data parts and tool output from messages before sending to
+ * the API. The LLM generated those specs — it doesn't need to see them again —
+ * and tool outputs are already summarized in the assistant text. This alone
+ * can cut payload size by 10-50x on long conversations.
+ *
+ * We also cap history to the last MAX_HISTORY_MESSAGES messages to prevent
+ * unbounded growth.
+ */
+const MAX_HISTORY_MESSAGES = 20;
+
+function stripHeavyParts(messages: UIMessage[]): UIMessage[] {
+  // Take only the last N messages to cap context size
+  const capped =
+    messages.length > MAX_HISTORY_MESSAGES
+      ? messages.slice(-MAX_HISTORY_MESSAGES)
+      : messages;
+
+  return capped.map((m) => {
+    if (m.role !== "assistant" || !Array.isArray(m.parts)) return m;
+
+    // Filter out spec data parts and strip tool result output
+    const lightParts = m.parts
+      .filter((p: any) => p.type !== SPEC_DATA_PART_TYPE)
+      .map((p: any) => {
+        // Strip large tool output data — keep the tool call metadata
+        if (p.type?.startsWith("tool-") && p.output != null) {
+          return { ...p, output: "[stripped]" };
+        }
+        return p;
+      });
+
+    return { ...m, parts: lightParts };
+  });
+}
+
+const transport = new DefaultChatTransport({
+  api: "/api/chat",
+  prepareSendMessagesRequest: ({ id, messages }) => ({
+    body: { id, messages: stripHeavyParts(messages as UIMessage[]) },
+  }),
+});
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+function extractPromptFromMessage(m: AppMessage): string {
+  const msg = m as { content?: string; parts?: Array<{ type?: string; text?: string }> };
+  if (typeof msg.content === "string") return msg.content;
+  if (Array.isArray(msg.parts)) {
+    const textPart = msg.parts.find((p) => p.type === "text");
+    if (textPart && typeof textPart.text === "string") return textPart.text;
+  }
+  return "";
+}
 
 // =============================================================================
 // Suggestions (shown in empty state)
@@ -77,8 +135,8 @@ const SUGGESTIONS = [
     prompt: "Show me stats for the vercel/next.js and vercel/ai GitHub repos",
   },
   {
-    label: "Crypto dashboard",
-    prompt: "Build a crypto dashboard for Bitcoin, Ethereum, and Solana",
+    label: "Stock prices",
+    prompt: "Check the stock price of TQQQ, Nvidia, and Apple",
   },
   {
     label: "Hacker News top stories",
@@ -101,7 +159,7 @@ const TOOL_LABELS: Record<string, [string, string]> = {
   webSearch: ["Searching the web", "Searched the web"],
 };
 
-function SpecWithDebug({
+const SpecWithDebug = memo(function SpecWithDebug({
   spec,
   loading,
 }: {
@@ -127,9 +185,9 @@ function SpecWithDebug({
       )}
     </div>
   );
-}
+});
 
-function ToolCallDisplay({
+const ToolCallDisplay = memo(function ToolCallDisplay({
   toolName,
   state,
   result,
@@ -176,13 +234,40 @@ function ToolCallDisplay({
       )}
     </div>
   );
+});
+
+// =============================================================================
+// Output Block (assistant content + prompt pill header)
+// =============================================================================
+
+function OutputBlock({
+  rawPrompt,
+  aiTitle,
+  children,
+}: {
+  rawPrompt: string;
+  aiTitle?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="w-full flex flex-col">
+      <div className="sticky top-0 z-20 shrink-0 py-2 mb-2 bg-gradient-to-b from-background via-background/95 to-transparent">
+        <PromptPill
+          gistTitle={aiTitle}
+          rawPrompt={rawPrompt || undefined}
+          loading={!aiTitle}
+        />
+      </div>
+      <div className="min-h-0 flex-1">{children}</div>
+    </div>
+  );
 }
 
 // =============================================================================
 // Message Bubble
 // =============================================================================
 
-function MessageBubble({
+const MessageBubble = memo(function MessageBubble({
   message,
   isLast,
   isStreaming,
@@ -272,17 +357,8 @@ function MessageBubble({
   const showLoader =
     isLast && isStreaming && message.role === "assistant" && !hasAnything;
 
-  if (isUser) {
-    return (
-      <div className="flex justify-end">
-        {text && (
-          <div className="max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap bg-primary text-primary-foreground rounded-tr-md">
-            {text}
-          </div>
-        )}
-      </div>
-    );
-  }
+  // User prompts are not shown as bubbles; the prompt pill on the assistant block serves as the label
+  if (isUser) return null;
 
   // If there's a spec but no spec segment was inserted (edge case),
   // append it so it still renders.
@@ -294,16 +370,17 @@ function MessageBubble({
       {segments.map((seg, i) => {
         // For non-spec segments, determine if this step is active or fading.
         // A step fades when a newer step exists, or when the spec has appeared.
+        // Perma invisible the instant the spec/UI starts generating — no animation delay.
         const isActiveStep =
           seg.kind !== "spec" && stepOf[i] === lastStep && !hasSpec;
         const isFading = seg.kind !== "spec" && !isActiveStep;
+        const fadeClass = isFading ? "hidden" : "";
 
         if (seg.kind === "text") {
           return (
             <div
               key={`text-${i}`}
-              className={`text-sm leading-relaxed text-muted-foreground [&_p+p]:mt-3 ${isFading ? "animate-fade-out-collapse" : ""
-                }`}
+              className={`text-sm leading-relaxed text-muted-foreground [&_p+p]:mt-3 ${fadeClass}`}
             >
               <Streamdown
                 plugins={{ code }}
@@ -325,7 +402,7 @@ function MessageBubble({
         return (
           <div
             key={`tools-${i}`}
-            className={`flex flex-col gap-1 ${isFading ? "animate-fade-out-collapse" : ""}`}
+            className={`flex flex-col gap-1 ${fadeClass}`}
           >
             {seg.tools.map((t) => (
               <ToolCallDisplay
@@ -354,7 +431,7 @@ function MessageBubble({
       )}
     </div>
   );
-}
+});
 
 // =============================================================================
 // Page
@@ -373,6 +450,14 @@ export default function ChatPage() {
   // null = Showing latest interaction (live mode)
   // number = Index of 'user' message to show history for
   const [viewedIndex, setViewedIndex] = useState<number | null>(null);
+  // When set, we stay on this turn when pointer leaves the session list (click-to-pin)
+  const [pinnedIndex, setPinnedIndex] = useState<number | null>(null);
+  // When true, main area shows full session as one scrollable document; hover history scrolls to anchor
+  const [previewMode, setPreviewMode] = useState(false);
+  const returnToLiveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastHoveredIndexRef = useRef<number | null>(null);
+  const prevPreviewModeRef = useRef(previewMode);
+  const dotNavScrollRef = useRef<HTMLDivElement>(null);
 
   const {
     chats,
@@ -380,34 +465,135 @@ export default function ChatPage() {
     createChat,
     selectChat,
     saveMessages,
+    updateChatTitle,
+    updateChatAiTitles,
     deleteChat,
     currentChat
   } = useLocalChat();
+
+  // Track the latest messages in a ref so onFinish can access them
+  const messagesRef = useRef<AppMessage[]>([]);
+  const currentChatIdRef = useRef(currentChatId);
+  currentChatIdRef.current = currentChatId;
 
   const { messages, sendMessage, setMessages, status, error } =
     useChat<AppMessage>({
       transport,
       onFinish: () => {
-        if (currentChatId) {
-          // We need to wait for the messages state to update, or pass the new messages directly.
-          // useChat doesn't pass the new messages to onFinish in all versions, 
-          // but we can rely on the effect below to sync.
+        // Save to localStorage only when streaming completes — not on every chunk
+        const chatId = currentChatIdRef.current;
+        if (chatId && messagesRef.current.length > 0) {
+          saveMessages(chatId, messagesRef.current);
         }
       }
     });
 
-  // Sync messages to local storage whenever they change
-  useEffect(() => {
-    if (currentChatId && messages.length > 0) {
-      saveMessages(currentChatId, messages);
-    }
-  }, [messages, currentChatId, saveMessages]);
+  // Keep the ref in sync (cheap — no state update, no re-render)
+  messagesRef.current = messages as AppMessage[];
 
-  // Load messages when switching chats
+  // Also save when switching chats or on unmount, so we don't lose data
+  const prevChatIdRef = useRef(currentChatId);
+  useEffect(() => {
+    // Save the previous chat's messages when switching chats
+    if (prevChatIdRef.current && prevChatIdRef.current !== currentChatId) {
+      const prevId = prevChatIdRef.current;
+      if (messagesRef.current.length > 0) {
+        saveMessages(prevId, messagesRef.current);
+      }
+    }
+    prevChatIdRef.current = currentChatId;
+  }, [currentChatId, saveMessages]);
+
+  // --- AI title generation for sidebar chat name ---
+  const titleGenRef = useRef<Set<string>>(new Set()); // chat IDs already sent for title gen
+
+  useEffect(() => {
+    if (!currentChatId || !currentChat) return;
+    if (currentChat.title !== "New Chat") return; // already titled
+    if (titleGenRef.current.has(currentChatId)) return; // already in-flight
+
+    const firstUserMsg = messages.find((m) => m.role === "user");
+    if (!firstUserMsg) return;
+
+    let prompt = "";
+    if (typeof (firstUserMsg as any).content === "string") {
+      prompt = (firstUserMsg as any).content;
+    } else if (Array.isArray(firstUserMsg.parts)) {
+      const tp = firstUserMsg.parts.find((p: any) => p.type === "text");
+      if (tp) prompt = (tp as any).text;
+    }
+    if (!prompt.trim()) return;
+
+    titleGenRef.current.add(currentChatId);
+    const chatId = currentChatId; // capture for async closure
+    fetch("/api/title", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.title) updateChatTitle(chatId, data.title);
+      })
+      .catch(() => {
+        // fallback: keep "New Chat" — will retry next render cycle
+        titleGenRef.current.delete(chatId);
+      });
+  }, [messages, currentChatId, currentChat, updateChatTitle]);
+
+  // --- AI title generation for per-exchange prompt pills ---
+  const [aiTitles, setAiTitles] = useState<Record<string, string>>({});
+  const titleFetchingRef = useRef<Set<string>>(new Set()); // prompts already in-flight
+
+  useEffect(() => {
+    // Find user messages whose prompt text doesn't have an AI title yet
+    const userMsgs = messages.filter((m) => m.role === "user");
+    for (const m of userMsgs) {
+      let prompt = "";
+      if (typeof (m as any).content === "string") {
+        prompt = (m as any).content;
+      } else if (Array.isArray(m.parts)) {
+        const tp = m.parts.find((p: any) => p.type === "text");
+        if (tp) prompt = (tp as any).text;
+      }
+      if (!prompt.trim()) continue;
+      const key = prompt.trim();
+      if (
+        aiTitles[key] ||
+        currentChat?.aiTitles?.[key] ||
+        titleFetchingRef.current.has(key)
+      )
+        continue;
+
+      titleFetchingRef.current.add(key);
+      fetch("/api/title", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: key }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data?.title && currentChatId) {
+            setAiTitles((prev) => ({ ...prev, [key]: data.title }));
+            updateChatAiTitles(currentChatId, { [key]: data.title });
+          }
+        })
+        .catch(() => {
+          titleFetchingRef.current.delete(key);
+        });
+    }
+  }, [messages, currentChatId, updateChatAiTitles]); // intentionally exclude aiTitles to avoid re-triggering
+
+  // Load messages and persisted aiTitles when switching chats
   useEffect(() => {
     if (currentChat) {
       setMessages(currentChat.messages as AppMessage[]);
       setViewedIndex(null);
+      if (currentChat.aiTitles && Object.keys(currentChat.aiTitles).length > 0) {
+        setAiTitles(currentChat.aiTitles);
+      } else {
+        setAiTitles({});
+      }
     } else if (currentChatId === null && chats.length > 0) {
       // If no chat selected but we have chats, maybe select the first one?
       // Or keep it empty for "New Chat" state if we want explicit "New Chat" button press.
@@ -416,7 +602,7 @@ export default function ChatPage() {
       // But "Add Chat" creates an ID immediately.
       // Let's assume start = new chat.
     }
-  }, [currentChatId, setMessages]); // removed chats dependency to avoid loops
+  }, [currentChatId, setMessages]); // currentChat from closure when ID changes
 
   const handleAddChat = useCallback(() => {
     const newId = createChat();
@@ -429,80 +615,101 @@ export default function ChatPage() {
 
   const isStreaming = status === "streaming" || status === "submitted";
 
-  // Derive history items from messages
-  // We look for messages where role='user' to establish the start of a turn.
-  // We use the index as the identifier.
-  const historyItems = messages
-    .map((m, i) => ({ ...m, index: i }))
-    .filter((m) => m.role === "user")
-    .slice(0, -1) // Exclude the most recent user message (current turn)
-    .map((m) => {
-      // Find the next message (assistant response)
-      const assistantMsg = messages[m.index + 1];
+  // All exchanges (user index + messages) for the full-document view and history list
+  const exchangeIndices = messages
+    .map((m, i) => ({ role: m.role, index: i }))
+    .filter((x) => x.role === "user")
+    .map((x) => x.index);
 
-      // Extract user text
-      let userText = "";
-      // Check content property (for new messages) or try to find text part
-      if (typeof (m as any).content === "string") {
-        userText = (m as any).content;
-      } else if (Array.isArray(m.parts)) {
-        // Try to find text part
-        const textPart = m.parts.find((p: any) => p.type === 'text');
-        if (textPart) {
-          userText = (textPart as any).text;
-        }
-      }
-
-      let summary = userText ? userText.slice(0, 50) : "Complex Input";
-
-      return {
-        index: m.index,
-        summary: summary,
-        timestamp: Date.now(),
-      };
-    })
-    .reverse(); // Show newest first
-
-
-  // Determine what to display
-  let displayedMessages: AppMessage[] = [];
-
-  if (viewedIndex !== null) {
-    // History Mode: Show the user message at viewedIndex and the following assistant message (if exists)
-    const userMsg = messages[viewedIndex];
-    const assistantMsg = messages[viewedIndex + 1];
-    if (userMsg) {
-      displayedMessages.push(userMsg);
-      if (assistantMsg && assistantMsg.role === "assistant") {
-        displayedMessages.push(assistantMsg);
-      }
+  // Oldest at top, newest at bottom — matches main document scroll order
+  const historyItems = exchangeIndices.map((idx) => {
+    const m = messages[idx];
+    let userText = "";
+    if (typeof (m as any).content === "string") {
+      userText = (m as any).content;
+    } else if (Array.isArray(m.parts)) {
+      const textPart = m.parts.find((p: any) => p.type === "text");
+      if (textPart) userText = (textPart as any).text;
     }
-  } else {
-    // Live Mode (Focus Mode):
-    // Show the *latest* exchange. 
-    // Usually the last 2 messages (User + Assistant).
-    // If only User message exists (waiting for AI), show last 1.
-    // However, we want to ensure we're showing a complete turn if possible.
+    const key = userText.trim();
+    return {
+      index: idx,
+      summary: aiTitles[key] || (userText ? userText.slice(0, 50) : "Complex Input"),
+    };
+  });
 
-    if (messages.length > 0) {
-      // Find the last user message
-      const lastUserIndex = messages.findLastIndex(m => m.role === 'user');
-      if (lastUserIndex !== -1) {
-        displayedMessages = messages.slice(lastUserIndex);
-      } else {
-        // Fallback (e.g. system message only?)
-        displayedMessages = messages.slice(-2);
-      }
+  // Scroll main container so the start of this exchange's answer is at the top
+  const scrollToExchangeAnchor = useCallback((userIndex: number) => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    // Prefer answer-start anchor so the beginning of the assistant reply is at top
+    const answerStart = document.getElementById(`exchange-${userIndex}-start`);
+    const fallback = document.getElementById(`exchange-${userIndex}`);
+    const el = answerStart ?? fallback;
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
     }
-  }
+  }, []);
+
 
   // Auto-switch back to live mode when a new message is added (while not viewing history)
   useEffect(() => {
     if (status === 'submitted' || status === 'streaming') {
       setViewedIndex(null);
+      setPinnedIndex(null);
     }
   }, [status]);
 
+  // When entering preview mode, show pinned or latest exchange and scroll to it
+  useEffect(() => {
+    if (!previewMode) return;
+    const target =
+      pinnedIndex ??
+      (exchangeIndices.length > 0 ? exchangeIndices[exchangeIndices.length - 1]! : null);
+    if (target !== null) {
+      setViewedIndex(target);
+      lastHoveredIndexRef.current = target;
+    }
+  }, [previewMode]);
+
+  // In preview mode, smooth-scroll main container to the hovered exchange anchor
+  useEffect(() => {
+    if (!previewMode || viewedIndex == null) return;
+    if (lastHoveredIndexRef.current === viewedIndex) return;
+    lastHoveredIndexRef.current = viewedIndex;
+    const t = requestAnimationFrame(() => {
+      scrollToExchangeAnchor(viewedIndex);
+    });
+    return () => cancelAnimationFrame(t);
+  }, [previewMode, viewedIndex, scrollToExchangeAnchor]);
+
+  // When leaving preview mode with a pinned item, scroll so the exchange stays exactly
+  // where the click brought it (top of viewport)—avoids jarring jumps when switching to single-exchange view
+  useEffect(() => {
+    const wasPreview = prevPreviewModeRef.current;
+    prevPreviewModeRef.current = previewMode;
+    if (wasPreview && !previewMode && pinnedIndex !== null) {
+      const t = requestAnimationFrame(() => {
+        const container = scrollContainerRef.current;
+        const el = document.getElementById("pinned-exchange-start");
+        if (container && el) {
+          const containerRect = container.getBoundingClientRect();
+          const elRect = el.getBoundingClientRect();
+          container.scrollTop += elRect.top - containerRect.top;
+        }
+      });
+      return () => cancelAnimationFrame(t);
+    }
+  }, [previewMode, pinnedIndex]);
+
+  // When hovering prompts in order, scroll dot nav horizontally so active dot stays on the right
+  useEffect(() => {
+    if (viewedIndex == null) return;
+    const dotEl = document.getElementById(`dot-nav-${viewedIndex}`);
+    if (dotEl) {
+      dotEl.scrollIntoView({ behavior: "smooth", inline: "end", block: "nearest" });
+    }
+  }, [viewedIndex]);
 
   
 
@@ -524,6 +731,22 @@ export default function ChatPage() {
       await sendMessage({ text: message.trim() });
     },
     [input, isStreaming, sendMessage, currentChatId, createChat],
+  );
+
+  /** Sends follow-up choice as the next user message (shortcut). Does NOT block on isStreaming so the user's selection is always sent after they click Confirm. */
+  const handleSendFollowUp = useCallback(
+    async (shortcutText: string) => {
+      const message = (shortcutText || "").trim();
+      if (!message) return;
+
+      let activeId = currentChatId;
+      if (!activeId) activeId = createChat();
+
+      setViewedIndex(null);
+      setInput("");
+      await sendMessage({ text: message });
+    },
+    [sendMessage, currentChatId, createChat],
   );
 
   const handleKeyDown = useCallback(
@@ -597,6 +820,7 @@ export default function ChatPage() {
           </SidebarFooter>
         </Sidebar>
         <SidebarInset>
+          <FollowUpProvider sendFollowUp={handleSendFollowUp}>
           <div className="h-screen flex flex-col overflow-hidden relative">
             {/* Sidebar trigger — top-left, no overlay; main content stays in focus */}
             <div className="absolute top-4 left-4 z-20">
@@ -608,30 +832,113 @@ export default function ChatPage() {
               />
             </div>
 
-            {/* Current Conversation History Bubble (Bottom Right) */}
+        {/* Current Conversation History — vertical dot nav on page content; hover to enter preview */}
         {!isEmpty && (
-          <div className="absolute bottom-6 right-6 z-50 flex flex-col items-end pointer-events-none">
-            <div className="group flex flex-col items-end pointer-events-auto">
-              {/* The Bubble Content - Revealed on Hover */}
-              <div className="mb-2 w-72 max-h-[60vh] overflow-y-auto bg-popover border rounded-xl shadow-xl p-2 opacity-0 scale-95 origin-bottom-right transition-all duration-200 group-hover:opacity-100 group-hover:scale-100 hidden group-hover:flex flex-col gap-1">
-                <div className="text-xs font-semibold text-muted-foreground px-2 py-1">Current Session</div>
-                {historyItems.map((item) => (
+          <div className="absolute right-5 top-[25%] -translate-y-1/2 z-50 flex flex-row items-center pointer-events-none">
+            <div
+              className="group flex flex-row items-center pointer-events-auto"
+              onMouseEnter={() => {
+                if (returnToLiveTimeoutRef.current) {
+                  clearTimeout(returnToLiveTimeoutRef.current);
+                  returnToLiveTimeoutRef.current = null;
+                }
+                setPreviewMode(true);
+              }}
+              onMouseLeave={() => {
+                setPreviewMode(false);
+                lastHoveredIndexRef.current = null;
+                if (pinnedIndex !== null) {
+                  setViewedIndex(pinnedIndex);
+                  return;
+                }
+                returnToLiveTimeoutRef.current = setTimeout(() => {
+                  setViewedIndex(null);
+                  returnToLiveTimeoutRef.current = null;
+                }, 400);
+              }}
+            >
+              <div
+                className={`mr-2 w-72 max-h-[60vh] overflow-hidden rounded-xl bg-popover/90 backdrop-blur-md border border-border/50 opacity-0 scale-95 origin-right transition-all duration-200 group-hover:opacity-100 group-hover:scale-100 hidden flex-col order-first ${previewMode ? "group-hover:flex" : ""}`}
+                onWheel={(e) => {
+                  if (!previewMode) return;
+                  const main = scrollContainerRef.current;
+                  if (!main) return;
+                  e.preventDefault();
+                  main.scrollTop += e.deltaY;
+                }}
+              >
+                <div
+                  className="overflow-y-auto overflow-x-hidden max-h-[60vh] p-2 flex flex-col gap-0.5 rounded-xl"
+                  onWheel={(e) => {
+                    if (!previewMode) return;
+                    const main = scrollContainerRef.current;
+                    if (!main) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    main.scrollTop += e.deltaY;
+                  }}
+                >
+                  <div className="text-xs font-semibold text-muted-foreground px-2 py-1.5 sticky top-0 bg-popover/90 backdrop-blur-md">
+                    Current Session{previewMode ? " · scroll" : pinnedIndex !== null ? " · pinned" : ""}
+                  </div>
+                  {historyItems.map((item) => (
                   <div
                     key={item.index}
-                    className={`text-sm p-2 rounded-lg cursor-pointer hover:bg-muted/50 transition-colors ${viewedIndex === item.index ? "bg-muted" : ""}`}
-                    onClick={() => setViewedIndex(item.index)}
+                    role="button"
+                    tabIndex={0}
+                    className={`text-sm p-2.5 rounded-lg transition-all duration-150 select-none ${viewedIndex === item.index ? "bg-muted" : "hover:bg-muted/60"} cursor-pointer`}
+                    onMouseEnter={() => setViewedIndex(item.index)}
+                    onFocus={() => setViewedIndex(item.index)}
+                    onClick={() => {
+                      setViewedIndex(item.index);
+                      setPinnedIndex(item.index);
+                      setPreviewMode(false);
+                    }}
                   >
-                    {/* We can improve this label to show prompt + snippet if available */}
                     <div className="font-medium truncate">{item.summary}</div>
-                    {/* Assuming we can get the assistant response snippet easily, but for now summary is the prompt */}
                   </div>
                 ))}
+                </div>
               </div>
 
-              {/* The Toggle Button */}
-              <Button variant="outline" size="icon" className="h-10 w-10 rounded-full shadow-lg bg-background">
-                <MessageSquare className="h-5 w-5" />
-              </Button>
+              <div
+                className="flex flex-col items-center gap-1.5 py-3 px-2 bg-background/30 backdrop-blur-sm rounded-l-xl"
+                aria-label="Session navigation"
+              >
+                {historyItems.map((item, i) => {
+                  const lastIdx = exchangeIndices[exchangeIndices.length - 1];
+                  const currentIndex = viewedIndex ?? lastIdx ?? -1;
+                  const isCurrent = item.index === currentIndex;
+                  return (
+                  <Fragment key={item.index}>
+                    {i > 0 && (
+                      <div
+                        className="w-px h-3 shrink-0 bg-muted-foreground/30"
+                        aria-hidden
+                      />
+                    )}
+                    <button
+                      key={item.index}
+                      type="button"
+                      className={`w-2.5 h-2.5 rounded-full transition-all duration-150 shrink-0 ${
+                        isCurrent
+                          ? "bg-foreground scale-110"
+                          : "bg-muted-foreground/40 hover:bg-muted-foreground/70"
+                      } ${pinnedIndex === item.index && previewMode ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}`}
+                      title={item.summary}
+                      aria-label={`Go to: ${item.summary}`}
+                      onMouseEnter={() => setViewedIndex(item.index)}
+                      onFocus={() => setViewedIndex(item.index)}
+                      onClick={() => {
+                        setViewedIndex(item.index);
+                        setPinnedIndex(item.index);
+                        setPreviewMode(false);
+                      }}
+                    />
+                  </Fragment>
+                );
+                })}
+              </div>
             </div>
           </div>
         )}
@@ -644,12 +951,8 @@ export default function ChatPage() {
               <div className="max-w-2xl w-full space-y-8">
                 <div className="text-center space-y-2">
                   <h2 className="text-2xl font-semibold tracking-tight">
-                    What would you like to explore?
+                    Explore the Internet Differently
                   </h2>
-                  <p className="text-muted-foreground">
-                    Ask about weather, GitHub repos, crypto prices, or Hacker News
-                    -- the agent will fetch real data and build a dashboard.
-                  </p>
                 </div>
 
                 {/* Suggestions */}
@@ -669,32 +972,115 @@ export default function ChatPage() {
                 </div>
               </div>
             </div>
+          ) : previewMode ? (
+            /* Preview: one long document with answer-start anchors; hover history scrolls to anchor */
+            <div className="w-full px-16 pt-4 pb-24 space-y-8">
+              {exchangeIndices.map((userIdx) => {
+                const userMsg = messages[userIdx];
+                const assistantMsg = messages[userIdx + 1];
+                const isLastExchange = userIdx === exchangeIndices[exchangeIndices.length - 1];
+                const rawPrompt = extractPromptFromMessage(userMsg);
+                return (
+                  <div
+                    key={userIdx}
+                    id={`exchange-${userIdx}`}
+                    className="space-y-4"
+                  >
+                    {assistantMsg && assistantMsg.role === "assistant" ? (
+                      <div
+                        id={`exchange-${userIdx}-start`}
+                        className="scroll-mt-4"
+                      >
+                        <OutputBlock rawPrompt={rawPrompt} aiTitle={aiTitles[rawPrompt.trim()]}>
+                          <MessageBubble
+                            message={assistantMsg}
+                            isLast={isLastExchange && !isStreaming}
+                            isStreaming={isLastExchange && isStreaming}
+                          />
+                        </OutputBlock>
+                      </div>
+                    ) : (
+                      <OutputBlock rawPrompt={rawPrompt} aiTitle={aiTitles[rawPrompt.trim()]}>
+                        <div className="text-sm text-muted-foreground animate-shimmer">Thinking...</div>
+                      </OutputBlock>
+                    )}
+                  </div>
+                );
+              })}
+              {error && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{error.message}</AlertDescription>
+                </Alert>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
           ) : (
-            /* Message thread - Focus Mode */
-            <div className="max-w-6xl mx-auto px-10 py-6 pb-24 space-y-6">
+            /* Single-exchange view (latest or pinned) — render all exchanges, toggle visibility to avoid remount/animation */
+            <div className="w-full px-16 pt-2 pb-24 space-y-6">
               {viewedIndex !== null && (
                 <div className="flex justify-center mb-4">
                   <Button
                     variant="secondary"
                     size="xs"
                     className="text-xs h-7 gap-1"
-                    onClick={() => setViewedIndex(null)}
+                    onClick={() => {
+                      setViewedIndex(null);
+                      setPinnedIndex(null);
+                    }}
                   >
-                    Viewing History (Click to return to active chat)
+                    {pinnedIndex !== null ? "Unpin and return to latest" : "Return to latest"}
                   </Button>
                 </div>
               )}
 
-              {displayedMessages.map((message, index) => (
-                <MessageBubble
-                  key={message.id}
-                  message={message}
-                  isLast={index === displayedMessages.length - 1}
-                  isStreaming={isStreaming && viewedIndex === null && index === displayedMessages.length - 1}
-                />
-              ))}
+              <div id={viewedIndex !== null ? "pinned-exchange-start" : undefined} className="space-y-6">
+              {exchangeIndices.map((userIdx) => {
+                const userMsg = messages[userIdx];
+                const assistantMsg = messages[userIdx + 1];
+                const lastExchangeIdx = exchangeIndices[exchangeIndices.length - 1];
+                const isActive =
+                  viewedIndex === userIdx ||
+                  (viewedIndex === null && userIdx === lastExchangeIdx);
+                if (!userMsg) return null;
 
-              {/* Error display */}
+                const rawPrompt = extractPromptFromMessage(userMsg);
+                return (
+                  <div
+                    key={userIdx}
+                    className={isActive ? "space-y-6" : "hidden"}
+                    aria-hidden={!isActive}
+                  >
+                    {assistantMsg && assistantMsg.role === "assistant" ? (
+                      <OutputBlock
+                        rawPrompt={rawPrompt}
+                        aiTitle={aiTitles[rawPrompt.trim()]}
+                      >
+                        <MessageBubble
+                          message={assistantMsg}
+                          isLast={userIdx === lastExchangeIdx && !isStreaming}
+                          isStreaming={
+                            isStreaming &&
+                            viewedIndex === null &&
+                            userIdx === lastExchangeIdx
+                          }
+                        />
+                      </OutputBlock>
+                    ) : (
+                      <OutputBlock
+                        rawPrompt={rawPrompt}
+                        aiTitle={aiTitles[rawPrompt.trim()]}
+                      >
+                        <div className="text-sm text-muted-foreground animate-shimmer">
+                          Thinking...
+                        </div>
+                      </OutputBlock>
+                    )}
+                  </div>
+                );
+              })}
+              </div>
+
               {error && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
@@ -724,22 +1110,26 @@ export default function ChatPage() {
               onFocus={() => setInputFocused(true)}
               onBlur={() => setInputFocused(false)}
               placeholder={
-                isEmpty
-                  ? "e.g., Compare weather in NYC, London, and Tokyo..."
-                  : "Ask a follow-up..."
+                isStreaming && !input
+                  ? "     Thinking..."
+                  : isEmpty
+                    ? "e.g., Compare weather in NYC, London, and Tokyo..."
+                    : "Ask a follow-up..."
               }
               rows={1}
               className={[
-                "resize-none bg-card shadow-sm focus-visible:ring-0 focus-visible:border-input min-h-0 transition-all duration-300 ease-in-out",
+                "resize-none shadow-sm focus-visible:ring-0 focus-visible:border-input min-h-0 transition-all duration-300 ease-in-out",
+                isStreaming && !input ? "bg-background text-muted-foreground" : "bg-card",
                 inputExpanded ? "cursor-text" : "cursor-default caret-transparent",
                 inputExpanded ? "text-lg" : "text-sm",
+                isStreaming && !input && "animate-shimmer",
               ].join(" ")}
               style={{
                 height: inputExpanded ? undefined : "48px",
                 minHeight: inputExpanded ? "48px" : undefined,
                 maxHeight: inputExpanded ? "200px" : undefined,
                 overflow: inputExpanded ? "auto" : "hidden",
-                borderRadius: inputExpanded ? "1rem" : "9999px",
+                borderRadius: inputExpanded ? "1.5rem" : "9999px",
                 paddingLeft: inputExpanded ? "1rem" : "2.5rem",
                 paddingRight: inputExpanded ? "3rem" : "1.5rem",
                 paddingTop: "12px",
@@ -774,6 +1164,7 @@ export default function ChatPage() {
           </div>
         </div>
           </div>
+          </FollowUpProvider>
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>
