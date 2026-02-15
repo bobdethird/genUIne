@@ -34,7 +34,7 @@ interface Mesh3DProps {
   animation?: Animation3D | null;
 }
 
-function toVec3(v: number[] | null | undefined): Vec3Tuple | undefined {
+export function toVec3(v: number[] | null | undefined): Vec3Tuple | undefined {
   if (!v || v.length < 3) return undefined;
   return v.slice(0, 3) as Vec3Tuple;
 }
@@ -48,7 +48,7 @@ function toGeoArgs<T extends unknown[]>(
 }
 
 /** Shared hook for continuous rotation animation */
-function useRotationAnimation(
+export function useRotationAnimation(
   ref: React.RefObject<THREE.Object3D | null>,
   animation?: Animation3D | null,
 ) {

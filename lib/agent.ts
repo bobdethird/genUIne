@@ -211,6 +211,13 @@ Scene2D(width="100%", height="300px", viewBox="0 0 300 300") >
   Circle(cx=250, cy=50, r=30, fill="#ffeb3b") -- Sun
   Text2D(text="My House", x=150, y=280, fontSize=20, fill="#333", textAnchor="middle")
 
+PROJECTILE SIMULATION (interactive 2D physics):
+- When the user asks for a projectile simulation, ballistics, or trajectory demo, use the ProjectileSimulator component.
+- ProjectileSimulator is a single component: it shows inputs for gravity (m/s²), initial velocity (m/s), launch angle (degrees), and initial height (m), plus a Launch button and a 2D grid with axes. When the user clicks Launch, the projectile animates along the parabolic path.
+- You MUST bind each parameter to state so the user's input drives the animation. Use a root Stack with state containing gravity, initialVelocity, angle, height (numbers). Then pass { "$bindState": "/gravity" } for the gravity prop, and similarly for initialVelocity, angle, height.
+- Example spec: root Stack with state: { "gravity": 9.81, "initialVelocity": 20, "angle": 45, "height": 0 }. Single child: ProjectileSimulator with gravity: { "$bindState": "/gravity" }, initialVelocity: { "$bindState": "/initialVelocity" }, angle: { "$bindState": "/angle" }, height: { "$bindState": "/height" }. The state object on the Stack provides initial values; the bindings make the inputs two-way.
+- Do NOT use separate TextInput/Button components for this; ProjectileSimulator already includes the inputs and Launch button. Just output one ProjectileSimulator with the four bindings.
+
 MIXING 2D AND 3D:
 - You can combine 3D scenes with regular 2D components in the same spec. For example, use a Stack or Card at the root with a Scene3D plus Text, Callout, Accordion, etc. as siblings. This lets you build a rich educational experience with both an interactive 3D visualization and text content.
 

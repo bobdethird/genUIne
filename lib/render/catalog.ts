@@ -54,6 +54,7 @@ export const explorerCatalog = defineCatalog(schema, {
         justify: z
           .enum(["start", "center", "end", "between", "around"])
           .nullable(),
+        className: z.string().nullable(),
       }),
       slots: ["default"],
       description: "Flex container for layouts",
@@ -469,6 +470,23 @@ export const explorerCatalog = defineCatalog(schema, {
       },
     },
 
+    ProjectileSimulator: {
+      props: z.object({
+        gravity: z.number().nullable(),
+        initialVelocity: z.number().nullable(),
+        angle: z.number().nullable(),
+        height: z.number().nullable(),
+      }),
+      description:
+        'Interactive 2D projectile physics simulation. User can set gravity (m/s²), initial velocity (m/s), launch angle (degrees), and initial height (m). Use { "$bindState": "/path" } for each prop so the inputs are two-way bound. Renders a grid with axes and animates the projectile when the user clicks Launch. Use when the user asks for a projectile simulation, ballistics, or trajectory demo.',
+      example: {
+        gravity: { $bindState: "/gravity" },
+        initialVelocity: { $bindState: "/initialVelocity" },
+        angle: { $bindState: "/angle" },
+        height: { $bindState: "/height" },
+      },
+    },
+
     // =========================================================================
     // Map Components (Mapbox GL)
     // =========================================================================
@@ -567,6 +585,26 @@ export const explorerCatalog = defineCatalog(schema, {
         rotation: null,
         scale: null,
         animation: { rotate: [0, 0.005, 0] },
+      },
+    },
+
+    HoverableGroup3D: {
+      props: z.object({
+        ...transform3DProps,
+        animation: animation3D,
+        label: z.string().nullable(),
+        labelPosition: vec3.nullable(),
+        labelFontSize: z.number().nullable(),
+        labelColor: z.string().nullable(),
+      }),
+      slots: ["default"],
+      description:
+        "3D group that shows an optional label only when the user hovers over its children. Use to label planets on hover. Pass label and labelPosition props.",
+      example: {
+        label: "Mercury",
+        labelPosition: [5, 0.6, 0],
+        labelFontSize: 0.4,
+        labelColor: "#ffffff",
       },
     },
 
@@ -718,6 +756,16 @@ export const explorerCatalog = defineCatalog(schema, {
         fontSize: 0.8,
       },
     },
+
+    PlanetInfoOverlay: {
+      props: z.object({
+        className: z.string().nullable(),
+      }),
+      description:
+        "Overlay that shows planet info from state (set by fetchPlanetInfo action). Place above Scene3D in a Stack. Reads /planetInfo from state.",
+      example: { className: null },
+    },
+
     // =========================================================================
     // 2D Scene Components (SVG)
     // =========================================================================
@@ -859,5 +907,10 @@ export const explorerCatalog = defineCatalog(schema, {
     },
   },
 
-  actions: {},
+  actions: {
+    fetchPlanetInfo: {
+      params: z.object({ planet: z.string() }),
+      description: "Fetch basic planet facts from API and set /planetInfo in state. Used by solar scene hover.",
+    },
+  },
 });

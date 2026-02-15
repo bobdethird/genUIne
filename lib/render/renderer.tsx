@@ -8,9 +8,10 @@ import {
   StateProvider,
   VisibilityProvider,
   ActionProvider,
+  useStateStore,
 } from "@json-render/react";
 
-import { registry, Fallback } from "./registry";
+import { registry, handlers as createHandlers, Fallback } from "./registry";
 import { LightboxProvider } from "./lightbox";
 
 // =============================================================================
@@ -683,6 +684,40 @@ function sanitizeSpec(spec: Spec): Spec | null {
   return { ...spec, elements };
 }
 
+function RendererWithActions({
+  spec,
+  loading,
+}: {
+  spec: Spec;
+  loading?: boolean;
+}): ReactNode {
+  const store = useStateStore();
+  const actionHandlers = useMemo(() => {
+    const getSetState = () => (updater: (prev: Record<string, unknown>) => Record<string, unknown>) => {
+      const next = updater(store.state);
+      Object.entries(next).forEach(([key, value]) => {
+        const path = key.startsWith("/") ? key : `/${key}`;
+        store.set(path, value);
+      });
+    };
+    const getState = () => store.state;
+    return createHandlers(getSetState, getState);
+  }, [store.state, store.set]);
+
+  return (
+    <VisibilityProvider>
+      <ActionProvider handlers={actionHandlers}>
+        <Renderer
+          spec={spec}
+          registry={registry}
+          fallback={fallback}
+          loading={loading}
+        />
+      </ActionProvider>
+    </VisibilityProvider>
+  );
+}
+
 export const ExplorerRenderer = memo(function ExplorerRenderer({
   spec,
   loading,
@@ -700,16 +735,7 @@ export const ExplorerRenderer = memo(function ExplorerRenderer({
   return (
     <LightboxProvider>
       <StateProvider initialState={safeSpec.state ?? {}}>
-        <VisibilityProvider>
-          <ActionProvider>
-            <Renderer
-              spec={safeSpec}
-              registry={registry}
-              fallback={fallback}
-              loading={loading}
-            />
-          </ActionProvider>
-        </VisibilityProvider>
+        <RendererWithActions spec={safeSpec} loading={loading} />
       </StateProvider>
     </LightboxProvider>
   );

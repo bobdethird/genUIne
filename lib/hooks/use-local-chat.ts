@@ -7,6 +7,7 @@ export type ChatSession = {
     title: string;
     messages: UIMessage[];
     updatedAt: number;
+    aiTitles?: Record<string, string>;
 };
 
 const STORAGE_KEY = "chatgpt-v2-chats";
@@ -104,6 +105,19 @@ export function useLocalChat() {
         []
     );
 
+    const updateChatAiTitles = useCallback(
+        (chatId: string, updates: Record<string, string>) => {
+            setChats((prev) =>
+                prev.map((chat) => {
+                    if (chat.id !== chatId) return chat;
+                    const merged = { ...(chat.aiTitles ?? {}), ...updates };
+                    return { ...chat, aiTitles: merged };
+                })
+            );
+        },
+        []
+    );
+
     return {
         chats,
         currentChatId,
@@ -113,6 +127,7 @@ export function useLocalChat() {
         deleteChat,
         saveMessages,
         updateChatTitle,
+        updateChatAiTitles,
         isLoaded,
         currentChat: chats.find((c) => c.id === currentChatId) || null,
     };

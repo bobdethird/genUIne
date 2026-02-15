@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect, memo } from "react";
+import { useState, useCallback, useRef, useEffect, memo, Fragment } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import {
@@ -48,7 +48,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { useLocalChat } from "@/lib/hooks/use-local-chat";
-import { MessageSquare, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { PromptPill } from "@/components/prompt-pill";
 
 
@@ -454,6 +454,8 @@ export default function ChatPage() {
   const [previewMode, setPreviewMode] = useState(false);
   const returnToLiveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastHoveredIndexRef = useRef<number | null>(null);
+  const prevPreviewModeRef = useRef(previewMode);
+  const dotNavScrollRef = useRef<HTMLDivElement>(null);
 
   const {
     chats,
@@ -462,6 +464,7 @@ export default function ChatPage() {
     selectChat,
     saveMessages,
     updateChatTitle,
+    updateChatAiTitles,
     deleteChat,
     currentChat
   } = useLocalChat();
@@ -553,7 +556,12 @@ export default function ChatPage() {
       }
       if (!prompt.trim()) continue;
       const key = prompt.trim();
-      if (aiTitles[key] || titleFetchingRef.current.has(key)) continue;
+      if (
+        aiTitles[key] ||
+        currentChat?.aiTitles?.[key] ||
+        titleFetchingRef.current.has(key)
+      )
+        continue;
 
       titleFetchingRef.current.add(key);
       fetch("/api/title", {
@@ -563,21 +571,27 @@ export default function ChatPage() {
       })
         .then((r) => r.json())
         .then((data) => {
-          if (data?.title) {
+          if (data?.title && currentChatId) {
             setAiTitles((prev) => ({ ...prev, [key]: data.title }));
+            updateChatAiTitles(currentChatId, { [key]: data.title });
           }
         })
         .catch(() => {
           titleFetchingRef.current.delete(key);
         });
     }
-  }, [messages]); // intentionally exclude aiTitles to avoid re-triggering
+  }, [messages, currentChatId, updateChatAiTitles]); // intentionally exclude aiTitles to avoid re-triggering
 
-  // Load messages when switching chats
+  // Load messages and persisted aiTitles when switching chats
   useEffect(() => {
     if (currentChat) {
       setMessages(currentChat.messages as AppMessage[]);
       setViewedIndex(null);
+      if (currentChat.aiTitles && Object.keys(currentChat.aiTitles).length > 0) {
+        setAiTitles(currentChat.aiTitles);
+      } else {
+        setAiTitles({});
+      }
     } else if (currentChatId === null && chats.length > 0) {
       // If no chat selected but we have chats, maybe select the first one?
       // Or keep it empty for "New Chat" state if we want explicit "New Chat" button press.
@@ -586,7 +600,7 @@ export default function ChatPage() {
       // But "Add Chat" creates an ID immediately.
       // Let's assume start = new chat.
     }
-  }, [currentChatId, setMessages]); // removed chats dependency to avoid loops
+  }, [currentChatId, setMessages]); // currentChat from closure when ID changes
 
   const handleAddChat = useCallback(() => {
     const newId = createChat();
@@ -699,6 +713,33 @@ export default function ChatPage() {
     return () => cancelAnimationFrame(t);
   }, [previewMode, viewedIndex, scrollToExchangeAnchor]);
 
+  // When leaving preview mode with a pinned item, scroll so the exchange stays exactly
+  // where the click brought it (top of viewport)—avoids jarring jumps when switching to single-exchange view
+  useEffect(() => {
+    const wasPreview = prevPreviewModeRef.current;
+    prevPreviewModeRef.current = previewMode;
+    if (wasPreview && !previewMode && pinnedIndex !== null) {
+      const t = requestAnimationFrame(() => {
+        const container = scrollContainerRef.current;
+        const el = document.getElementById("pinned-exchange-start");
+        if (container && el) {
+          const containerRect = container.getBoundingClientRect();
+          const elRect = el.getBoundingClientRect();
+          container.scrollTop += elRect.top - containerRect.top;
+        }
+      });
+      return () => cancelAnimationFrame(t);
+    }
+  }, [previewMode, pinnedIndex]);
+
+  // When hovering prompts in order, scroll dot nav horizontally so active dot stays on the right
+  useEffect(() => {
+    if (viewedIndex == null) return;
+    const dotEl = document.getElementById(`dot-nav-${viewedIndex}`);
+    if (dotEl) {
+      dotEl.scrollIntoView({ behavior: "smooth", inline: "end", block: "nearest" });
+    }
+  }, [viewedIndex]);
 
   
 
@@ -804,31 +845,33 @@ export default function ChatPage() {
               />
             </div>
 
-        {/* Current Conversation History Bubble — hover to enter preview: one long document, scroll to exchange */}
+        {/* Current Conversation History — vertical dot nav on page content; hover to enter preview */}
         {!isEmpty && (
-          <div className="absolute bottom-6 right-6 z-50 flex flex-col items-end pointer-events-none">
-            <div className="group flex flex-col items-end pointer-events-auto">
+          <div className="absolute right-6 top-1/2 -translate-y-1/2 z-50 flex flex-row items-center pointer-events-none">
+            <div
+              className="group flex flex-row items-center pointer-events-auto"
+              onMouseEnter={() => {
+                if (returnToLiveTimeoutRef.current) {
+                  clearTimeout(returnToLiveTimeoutRef.current);
+                  returnToLiveTimeoutRef.current = null;
+                }
+                setPreviewMode(true);
+              }}
+              onMouseLeave={() => {
+                setPreviewMode(false);
+                lastHoveredIndexRef.current = null;
+                if (pinnedIndex !== null) {
+                  setViewedIndex(pinnedIndex);
+                  return;
+                }
+                returnToLiveTimeoutRef.current = setTimeout(() => {
+                  setViewedIndex(null);
+                  returnToLiveTimeoutRef.current = null;
+                }, 400);
+              }}
+            >
               <div
-                className="mb-2 w-72 max-h-[60vh] overflow-y-auto overflow-x-hidden bg-popover border rounded-xl shadow-xl p-2 opacity-0 scale-95 origin-bottom-right transition-all duration-200 group-hover:opacity-100 group-hover:scale-100 hidden group-hover:flex flex-col gap-0.5"
-                onMouseEnter={() => {
-                  if (returnToLiveTimeoutRef.current) {
-                    clearTimeout(returnToLiveTimeoutRef.current);
-                    returnToLiveTimeoutRef.current = null;
-                  }
-                  setPreviewMode(true);
-                }}
-                onMouseLeave={() => {
-                  setPreviewMode(false);
-                  lastHoveredIndexRef.current = null;
-                  if (pinnedIndex !== null) {
-                    setViewedIndex(pinnedIndex);
-                    return;
-                  }
-                  returnToLiveTimeoutRef.current = setTimeout(() => {
-                    setViewedIndex(null);
-                    returnToLiveTimeoutRef.current = null;
-                  }, 400);
-                }}
+                className="mr-2 w-72 max-h-[60vh] overflow-y-auto overflow-x-hidden bg-popover/90 backdrop-blur-md border border-border/50 rounded-xl shadow-xl p-2 opacity-0 scale-95 origin-right transition-all duration-200 group-hover:opacity-100 group-hover:scale-100 hidden group-hover:flex flex-col gap-0.5 order-first"
                 onWheel={(e) => {
                   if (!previewMode) return;
                   const main = scrollContainerRef.current;
@@ -837,7 +880,7 @@ export default function ChatPage() {
                   main.scrollTop += e.deltaY;
                 }}
               >
-                <div className="text-xs font-semibold text-muted-foreground px-2 py-1.5 sticky top-0 bg-popover">
+                <div className="text-xs font-semibold text-muted-foreground px-2 py-1.5 sticky top-0 bg-popover/90 backdrop-blur-md">
                   Current Session{previewMode ? " · scroll" : pinnedIndex !== null ? " · pinned" : ""}
                 </div>
                 {historyItems.map((item) => (
@@ -851,6 +894,7 @@ export default function ChatPage() {
                     onClick={() => {
                       setViewedIndex(item.index);
                       setPinnedIndex(item.index);
+                      setPreviewMode(false);
                     }}
                   >
                     <div className="font-medium truncate">{item.summary}</div>
@@ -858,9 +902,39 @@ export default function ChatPage() {
                 ))}
               </div>
 
-              <Button variant="outline" size="icon" className="h-10 w-10 rounded-full shadow-lg bg-background">
-                <MessageSquare className="h-5 w-5" />
-              </Button>
+              <div
+                className="flex flex-col items-center gap-1.5 py-3 px-2 bg-background/30 backdrop-blur-sm border border-transparent rounded-l-xl shadow-lg"
+                aria-label="Session navigation"
+              >
+                {historyItems.map((item, i) => (
+                  <Fragment key={item.index}>
+                    {i > 0 && (
+                      <div
+                        className="w-px h-3 shrink-0 bg-muted-foreground/30"
+                        aria-hidden
+                      />
+                    )}
+                    <button
+                      key={item.index}
+                      type="button"
+                      className={`w-2.5 h-2.5 rounded-full transition-all duration-150 shrink-0 ${
+                        viewedIndex === item.index
+                          ? "bg-foreground scale-110"
+                          : "bg-muted-foreground/40 hover:bg-muted-foreground/70"
+                      } ${pinnedIndex === item.index ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}`}
+                      title={item.summary}
+                      aria-label={`Go to: ${item.summary}`}
+                      onMouseEnter={() => setViewedIndex(item.index)}
+                      onFocus={() => setViewedIndex(item.index)}
+                      onClick={() => {
+                        setViewedIndex(item.index);
+                        setPinnedIndex(item.index);
+                        setPreviewMode(false);
+                      }}
+                    />
+                  </Fragment>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -959,6 +1033,7 @@ export default function ChatPage() {
                 </div>
               )}
 
+              <div id={viewedIndex !== null ? "pinned-exchange-start" : undefined} className="space-y-6">
               {displayedMessages.map((message, index) => {
                 if (message.role === "user") {
                   const isLast = index === displayedMessages.length - 1;
@@ -984,6 +1059,7 @@ export default function ChatPage() {
                   </OutputBlock>
                 );
               })}
+              </div>
 
               {error && (
                 <Alert variant="destructive">
