@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useMemo, memo } from "react";
+import { type ReactNode, useMemo, memo, useRef, useCallback } from "react";
 import {
   Renderer,
   type ComponentRenderer,
@@ -629,6 +629,8 @@ function repairSpec(spec: Spec): Spec {
 interface ExplorerRendererProps {
   spec: Spec | null;
   loading?: boolean;
+  /** Previous spec to reconcile with for in-place morphing. */
+  mergeWith?: Spec | null;
 }
 
 const fallback: ComponentRenderer = ({ element }) => (
@@ -683,27 +685,246 @@ function sanitizeSpec(spec: Spec): Spec | null {
   return { ...spec, elements };
 }
 
-export const ExplorerRenderer = memo(function ExplorerRenderer({
+/** Sanitize + repair + deduplicate a single spec, returning null if invalid. */
+function prepareSpec(raw: Spec | null | undefined): Spec | null {
+  if (!raw) return null;
+  const sanitized = sanitizeSpec(raw);
+  if (!sanitized) return null;
+  return deduplicateSpec(repairSpec(sanitized));
+}
+
+/** Extract semantic signature for matching: title/heading/label text, $state paths. */
+function getSemanticSignature(
+  el: { props?: Record<string, unknown> } | undefined,
+  elements: Record<string, unknown>,
+  getChildren: (el: unknown) => string[]
+): { text: string; statePaths: Set<string>; childTypes: string } {
+  const text = (el?.props?.title ?? el?.props?.text ?? el?.props?.label ?? el?.props?.content ?? "")
+    ?.toString()
+    ?.trim()
+    ?.toLowerCase() ?? "";
+  const statePaths = new Set<string>();
+  function collectPaths(v: unknown) {
+    if (v == null || typeof v !== "object") return;
+    const o = v as Record<string, unknown>;
+    if (typeof o.$state === "string") statePaths.add(o.$state);
+    if (typeof o.$bindState === "string") statePaths.add(o.$bindState);
+    Object.values(o).forEach(collectPaths);
+  }
+  if (el?.props) collectPaths(el.props);
+  const children = getChildren(el);
+  const childTypes = children
+    .map((c) => (elements[c] as { type?: string })?.type ?? "?")
+    .sort()
+    .join(",");
+  return { text, statePaths, childTypes };
+}
+
+/**
+ * Score how well oldEl matches newEl (higher = better). Type must match.
+ */
+function semanticMatchScore(
+  oldEl: { type?: string; props?: Record<string, unknown>; children?: unknown },
+  newEl: { type?: string; props?: Record<string, unknown>; children?: unknown },
+  oldEls: Record<string, unknown>,
+  newEls: Record<string, unknown>,
+  getChildren: (el: unknown) => string[],
+  sameIndexBonus: boolean
+): number {
+  if (oldEl.type !== newEl.type) return -1;
+  let score = 0;
+  const oldSig = getSemanticSignature(oldEl, oldEls, getChildren);
+  const newSig = getSemanticSignature(newEl, newEls, getChildren);
+  if (oldSig.text && newSig.text && oldSig.text === newSig.text) score += 10;
+  const sharedPaths = [...oldSig.statePaths].filter((p) => newSig.statePaths.has(p));
+  score += sharedPaths.length * 5;
+  if (oldSig.childTypes === newSig.childTypes) score += 3;
+  if (sameIndexBonus) score += 2;
+  return score;
+}
+
+/**
+ * Reconcile old and new specs so React updates components in place.
+ * Matches elements by type and semantic similarity (title/label, $state paths,
+ * child-type multiset); falls back to position. Matched elements keep old IDs
+ * so React reuses DOM nodes.
+ */
+function reconcileSpecs(oldSpec: Spec, newSpec: Spec): Spec {
+  const oldEls = oldSpec.elements;
+  const newEls = newSpec.elements;
+  const oldRoot = oldSpec.root;
+  const newRoot = newSpec.root;
+
+  if (!oldEls || !newEls || !oldRoot || !newRoot) return newSpec;
+
+  const oldRootEl = oldEls[oldRoot] as { type?: string } | undefined;
+  const newRootEl = newEls[newRoot] as { type?: string } | undefined;
+  if (!oldRootEl || !newRootEl || oldRootEl.type !== newRootEl.type) {
+    return newSpec;
+  }
+
+  const resolvedId = new Map<string, string>();
+
+  const getChildren = (el: unknown): string[] => {
+    const c = (el as { children?: unknown })?.children;
+    return Array.isArray(c) ? (c as string[]) : [];
+  };
+
+  function processNewElement(newId: string): void {
+    if (resolvedId.has(newId)) return;
+    resolvedId.set(newId, newId);
+    const el = newEls[newId] as { children?: unknown } | undefined;
+    if (!el) return;
+    for (const c of getChildren(el)) {
+      processNewElement(c);
+    }
+  }
+
+  function reconcile(oldId: string, newId: string): void {
+    const oldEl = oldEls[oldId] as { type?: string; props?: Record<string, unknown>; children?: unknown } | undefined;
+    const newEl = newEls[newId] as { type?: string; props?: Record<string, unknown>; children?: unknown } | undefined;
+    if (!oldEl || !newEl || oldEl.type !== newEl.type) return;
+
+    resolvedId.set(newId, oldId);
+
+    const oldChildren = getChildren(oldEl);
+    const newChildren = getChildren(newEl);
+    const usedOld = new Set<string>();
+
+    for (const newChildId of newChildren) {
+      const newChildEl = newEls[newChildId] as { type?: string; props?: Record<string, unknown>; children?: unknown } | undefined;
+      if (!newChildEl) continue;
+
+      const idx = newChildren.indexOf(newChildId);
+      let bestOldId: string | null = null;
+      let bestScore = -1;
+
+      for (const oldChildId of oldChildren) {
+        if (usedOld.has(oldChildId)) continue;
+        const oldChildEl = oldEls[oldChildId] as { type?: string; props?: Record<string, unknown>; children?: unknown } | undefined;
+        if (!oldChildEl) continue;
+        const sameIndex = idx < oldChildren.length && oldChildren[idx] === oldChildId;
+        const score = semanticMatchScore(oldChildEl, newChildEl, oldEls, newEls, getChildren, sameIndex);
+        if (score > bestScore) {
+          bestScore = score;
+          bestOldId = oldChildId;
+        }
+      }
+
+      if (bestOldId != null && bestScore >= 0) {
+        usedOld.add(bestOldId);
+        reconcile(bestOldId, newChildId);
+      } else {
+        processNewElement(newChildId);
+      }
+    }
+  }
+
+  reconcile(oldRoot, newRoot);
+
+  if (process.env.NODE_ENV === "development") {
+    const total = Object.keys(newEls).length;
+    const matched = [...resolvedId.entries()].filter(([k, v]) => v !== k).length;
+    const rate = total > 0 ? ((matched / total) * 100).toFixed(1) : "0";
+    // eslint-disable-next-line no-console
+    console.debug(`[continuity] reconcile match rate: ${matched}/${total} (${rate}%)`);
+  }
+
+  const reconciled: Record<string, unknown> = {};
+  for (const [newId, newEl] of Object.entries(newEls)) {
+    const outId = resolvedId.get(newId) ?? newId;
+    const el = newEl as { children?: unknown };
+    const children = Array.isArray(el.children)
+      ? (el.children as string[]).map((c) => resolvedId.get(c) ?? c)
+      : el.children;
+    reconciled[outId] = { ...el, children };
+  }
+
+  const mergedState = mergeState(oldSpec.state, newSpec.state);
+  return {
+    root: resolvedId.get(newRoot) ?? newRoot,
+    elements: reconciled,
+    state: mergedState,
+  } as Spec;
+}
+
+/**
+ * Deep merge old state into new. New wins for conflicts; old paths not in new
+ * are preserved (e.g. user form input, tab selection). Arrays and primitives
+ * from new replace old at that path.
+ */
+function mergeState(
+  oldState: Record<string, unknown> | null | undefined,
+  newState: Record<string, unknown> | null | undefined
+): Record<string, unknown> {
+  if (!oldState || typeof oldState !== "object") return newState ?? {};
+  if (!newState || typeof newState !== "object") return oldState;
+
+  const result = { ...newState };
+  for (const key of Object.keys(oldState)) {
+    if (key in result) {
+      const oldVal = oldState[key];
+      const newVal = result[key];
+      if (
+        oldVal != null &&
+        newVal != null &&
+        typeof oldVal === "object" &&
+        !Array.isArray(oldVal) &&
+        typeof newVal === "object" &&
+        !Array.isArray(newVal)
+      ) {
+        result[key] = mergeState(
+          oldVal as Record<string, unknown>,
+          newVal as Record<string, unknown>
+        );
+      }
+    } else {
+      result[key] = oldState[key];
+    }
+  }
+  return result;
+}
+
+/** Apply a JSON Pointer path update to a state object (mutates). */
+function setStateAtPath(
+  state: Record<string, unknown>,
+  path: string,
+  value: unknown
+): void {
+  const segments = path.split("/").filter(Boolean);
+  if (segments.length === 0) return;
+  let current: Record<string, unknown> = state;
+  for (let i = 0; i < segments.length - 1; i++) {
+    const key = segments[i];
+    const next = current[key];
+    if (next == null || typeof next !== "object" || Array.isArray(next)) {
+      current[key] = {};
+    }
+    current = current[key] as Record<string, unknown>;
+  }
+  current[segments[segments.length - 1]] = value;
+}
+
+/** Inner wrapper that renders one spec inside all required providers. */
+function RenderedSpec({
   spec,
   loading,
-}: ExplorerRendererProps): ReactNode {
-  // Sanitize → repair → deduplicate (memoized by spec reference)
-  const safeSpec = useMemo(() => {
-    if (!spec) return null;
-    const sanitized = sanitizeSpec(spec);
-    if (!sanitized) return null;
-    return deduplicateSpec(repairSpec(sanitized));
-  }, [spec]);
-
-  if (!safeSpec || !safeSpec.root || !safeSpec.elements) return null;
-
+  onStateChange,
+}: {
+  spec: Spec;
+  loading?: boolean;
+  onStateChange?: (path: string, value: unknown) => void;
+}) {
   return (
     <LightboxProvider>
-      <StateProvider initialState={safeSpec.state ?? {}}>
+      <StateProvider
+        initialState={spec.state ?? {}}
+        onStateChange={onStateChange}
+      >
         <VisibilityProvider>
           <ActionProvider>
             <Renderer
-              spec={safeSpec}
+              spec={spec}
               registry={registry}
               fallback={fallback}
               loading={loading}
@@ -712,5 +933,52 @@ export const ExplorerRenderer = memo(function ExplorerRenderer({
         </VisibilityProvider>
       </StateProvider>
     </LightboxProvider>
+  );
+}
+
+export const ExplorerRenderer = memo(function ExplorerRenderer({
+  spec,
+  loading,
+  mergeWith,
+}: ExplorerRendererProps): ReactNode {
+  const newSpec = useMemo(() => prepareSpec(spec), [spec]);
+  const prevSpec = useMemo(() => prepareSpec(mergeWith), [mergeWith]);
+
+  const liveStateRef = useRef<Record<string, unknown>>({});
+
+  const newSpecReady = !!newSpec?.root && !!newSpec?.elements;
+  const hasPrevSpec = !!prevSpec?.root && !!prevSpec?.elements;
+
+  const specToRender = useMemo(() => {
+    if (newSpecReady && hasPrevSpec && newSpec && prevSpec) {
+      return deduplicateSpec(repairSpec(reconcileSpecs(prevSpec, newSpec) as Spec));
+    }
+    if (newSpecReady && newSpec) return newSpec;
+    if (hasPrevSpec && prevSpec) return prevSpec;
+    return null;
+  }, [newSpecReady, hasPrevSpec, newSpec, prevSpec]);
+
+  const mergedState = useMemo(() => {
+    if (!specToRender?.state) return liveStateRef.current;
+    return mergeState(liveStateRef.current, specToRender.state);
+  }, [specToRender?.state]);
+
+  const specWithMergedState = useMemo(() => {
+    if (!specToRender) return null;
+    return { ...specToRender, state: mergedState };
+  }, [specToRender, mergedState]);
+
+  const handleStateChange = useCallback((path: string, value: unknown) => {
+    setStateAtPath(liveStateRef.current, path, value);
+  }, []);
+
+  if (!specWithMergedState) return null;
+
+  return (
+    <RenderedSpec
+      spec={specWithMergedState}
+      loading={loading}
+      onStateChange={handleStateChange}
+    />
   );
 });

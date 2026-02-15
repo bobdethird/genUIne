@@ -8,6 +8,7 @@ import {
   SPEC_DATA_PART_TYPE,
   type SpecDataPart,
 } from "@json-render/core";
+import { buildContinuityFromMessages } from "@/lib/render/continuity";
 import { useJsonRenderMessage } from "@json-render/react";
 import { ExplorerRenderer } from "@/lib/render/renderer";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -101,9 +102,17 @@ function stripHeavyParts(messages: UIMessage[]): UIMessage[] {
 
 const transport = new DefaultChatTransport({
   api: "/api/chat",
-  prepareSendMessagesRequest: ({ id, messages }) => ({
-    body: { id, messages: stripHeavyParts(messages as UIMessage[]) },
-  }),
+  prepareSendMessagesRequest: ({ id, messages }) => {
+    const msgs = messages as UIMessage[];
+    const continuityContext = buildContinuityFromMessages(msgs);
+    return {
+      body: {
+        id,
+        messages: stripHeavyParts(msgs),
+        ...(continuityContext && { continuityContext }),
+      },
+    };
+  },
 });
 
 // =============================================================================
@@ -161,14 +170,16 @@ const TOOL_LABELS: Record<string, [string, string]> = {
 const SpecWithDebug = memo(function SpecWithDebug({
   spec,
   loading,
+  mergeWith,
 }: {
   spec: Parameters<typeof ExplorerRenderer>[0]["spec"];
   loading: boolean;
+  mergeWith?: Parameters<typeof ExplorerRenderer>[0]["mergeWith"];
 }) {
   const [showJson, setShowJson] = useState(false);
   return (
     <div className="w-full flex flex-col gap-2">
-      <ExplorerRenderer spec={spec} loading={loading} />
+      <ExplorerRenderer spec={spec} loading={loading} mergeWith={mergeWith} />
       <button
         type="button"
         className="self-end inline-flex items-center gap-1 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors"
@@ -182,6 +193,41 @@ const SpecWithDebug = memo(function SpecWithDebug({
           {JSON.stringify(spec, null, 2)}
         </pre>
       )}
+    </div>
+  );
+});
+
+// =============================================================================
+// Persistent Spec View — never remounts, transitions specs in place
+// =============================================================================
+
+/**
+ * Lives at the page level with a stable key so the ExplorerRenderer never
+ * remounts. Receives raw message parts and extracts specs internally.
+ */
+const PersistentSpecView = memo(function PersistentSpecView({
+  currentParts,
+  previousParts,
+  loading,
+}: {
+  currentParts: any[];
+  previousParts: any[];
+  loading: boolean;
+}) {
+  const { spec: currentSpec, hasSpec: hasCurrentSpec } =
+    useJsonRenderMessage(currentParts);
+  const { spec: previousSpec, hasSpec: hasPreviousSpec } =
+    useJsonRenderMessage(previousParts);
+
+  if (!hasCurrentSpec && !hasPreviousSpec) return null;
+
+  return (
+    <div className="w-full">
+      <SpecWithDebug
+        spec={currentSpec}
+        loading={loading}
+        mergeWith={previousSpec ?? undefined}
+      />
     </div>
   );
 });
@@ -266,6 +312,10 @@ function OutputBlock({
 // Message Bubble
 // =============================================================================
 
+/**
+ * MessageBubble — renders only text and tool-call segments.
+ * Spec rendering is handled by PersistentSpecView at the page level.
+ */
 const MessageBubble = memo(function MessageBubble({
   message,
   isLast,
@@ -276,11 +326,9 @@ const MessageBubble = memo(function MessageBubble({
   isStreaming: boolean;
 }) {
   const isUser = message.role === "user";
-  const { spec, text, hasSpec } = useJsonRenderMessage(message.parts);
+  const { hasSpec } = useJsonRenderMessage(message.parts);
 
   // Build ordered segments from parts, collapsing adjacent text and adjacent tools.
-  // Spec data parts are tracked so the rendered UI appears inline where the AI
-  // placed it rather than always at the bottom.
   const segments: Array<
     | { kind: "text"; text: string }
     | {
@@ -292,10 +340,7 @@ const MessageBubble = memo(function MessageBubble({
         output?: unknown;
       }>;
     }
-    | { kind: "spec" }
   > = [];
-
-  let specInserted = false;
 
   for (const part of message.parts) {
     if (part.type === "text") {
@@ -334,21 +379,16 @@ const MessageBubble = memo(function MessageBubble({
           ],
         });
       }
-    } else if (part.type === SPEC_DATA_PART_TYPE && !specInserted) {
-      // First spec data part — mark where the rendered UI should appear
-      segments.push({ kind: "spec" });
-      specInserted = true;
     }
   }
 
   // Assign a step number to each segment. A new step starts with each text
-  // segment; tools inherit the step of their preceding text. Spec segments
-  // are excluded (always shown). This lets text + its tool calls fade as one unit.
+  // segment; tools inherit the step of their preceding text.
   const stepOf: number[] = [];
   let step = -1;
   for (let i = 0; i < segments.length; i++) {
     if (segments[i].kind === "text") step++;
-    stepOf[i] = segments[i].kind === "spec" ? -1 : Math.max(0, step);
+    stepOf[i] = Math.max(0, step);
   }
   const lastStep = Math.max(0, step);
 
@@ -356,22 +396,14 @@ const MessageBubble = memo(function MessageBubble({
   const showLoader =
     isLast && isStreaming && message.role === "assistant" && !hasAnything;
 
-  // User prompts are not shown as bubbles; the prompt pill on the assistant block serves as the label
+  // User prompts are not shown as bubbles
   if (isUser) return null;
-
-  // If there's a spec but no spec segment was inserted (edge case),
-  // append it so it still renders.
-  const specRenderedInline = specInserted;
-  const showSpecAtEnd = hasSpec && !specRenderedInline;
 
   return (
     <div className="w-full flex flex-col gap-3">
       {segments.map((seg, i) => {
-        // For non-spec segments, determine if this step is active or fading.
-        // A step fades when a newer step exists, or when the spec has appeared.
-        const isActiveStep =
-          seg.kind !== "spec" && stepOf[i] === lastStep && !hasSpec;
-        const isFading = seg.kind !== "spec" && !isActiveStep;
+        const isActiveStep = stepOf[i] === lastStep && !hasSpec;
+        const isFading = !isActiveStep;
 
         if (seg.kind === "text") {
           return (
@@ -386,14 +418,6 @@ const MessageBubble = memo(function MessageBubble({
               >
                 {seg.text}
               </Streamdown>
-            </div>
-          );
-        }
-        if (seg.kind === "spec") {
-          if (!hasSpec) return null;
-          return (
-            <div key="spec" className="w-full">
-              <SpecWithDebug spec={spec} loading={isLast && isStreaming} />
             </div>
           );
         }
@@ -418,13 +442,6 @@ const MessageBubble = memo(function MessageBubble({
       {showLoader && (
         <div className="text-sm text-muted-foreground animate-shimmer">
           Thinking...
-        </div>
-      )}
-
-      {/* Fallback: render spec at end if no inline position was found */}
-      {showSpecAtEnd && (
-        <div className="w-full">
-          <SpecWithDebug spec={spec} loading={isLast && isStreaming} />
         </div>
       )}
     </div>
@@ -638,6 +655,8 @@ export default function ChatPage() {
 
   // Determine what to display
   let displayedMessages: AppMessage[] = [];
+  let isBuffered = false;
+  let lastUserIndexLive = -1;
 
   if (viewedIndex !== null) {
     // History Mode: Show the user message at viewedIndex and the following assistant message (if exists)
@@ -651,18 +670,36 @@ export default function ChatPage() {
     }
   } else {
     // Live Mode (Focus Mode):
-    // Show the *latest* exchange. 
-    // Usually the last 2 messages (User + Assistant).
-    // If only User message exists (waiting for AI), show last 1.
-    // However, we want to ensure we're showing a complete turn if possible.
-
+    // Show the *latest* exchange. Buffer: keep previous UI visible until new spec arrives.
     if (messages.length > 0) {
-      // Find the last user message
       const lastUserIndex = messages.findLastIndex(m => m.role === 'user');
+      lastUserIndexLive = lastUserIndex;
       if (lastUserIndex !== -1) {
-        displayedMessages = messages.slice(lastUserIndex);
+        const lastAssistantMsg = messages[lastUserIndex + 1];
+        const hasNewAssistant = lastAssistantMsg?.role === "assistant";
+        const newSpecReady =
+          hasNewAssistant &&
+          Array.isArray(lastAssistantMsg.parts) &&
+          lastAssistantMsg.parts.some(
+            (p: { type?: string }) => p.type === SPEC_DATA_PART_TYPE
+          );
+        const prevUserIndex = messages
+          .slice(0, lastUserIndex)
+          .findLastIndex(m => m.role === "user");
+
+        if (hasNewAssistant || !!error) {
+          // Show new exchange; mergeWith provides incremental updates from previous spec
+          displayedMessages = messages.slice(lastUserIndex);
+          isBuffered =
+            isStreaming && !error && hasNewAssistant && !newSpecReady;
+        } else if (prevUserIndex !== -1) {
+          // No assistant yet — keep showing previous exchange
+          displayedMessages = messages.slice(prevUserIndex, prevUserIndex + 2);
+          isBuffered = true;
+        } else {
+          displayedMessages = messages.slice(lastUserIndex);
+        }
       } else {
-        // Fallback (e.g. system message only?)
         displayedMessages = messages.slice(-2);
       }
     }
@@ -914,6 +951,11 @@ export default function ChatPage() {
                         className="scroll-mt-4"
                       >
                         <OutputBlock rawPrompt={rawPrompt} aiTitle={aiTitles[rawPrompt.trim()]}>
+                          <PersistentSpecView
+                            currentParts={assistantMsg.parts as any[]}
+                            previousParts={[]}
+                            loading={isLastExchange && isStreaming}
+                          />
                           <MessageBubble
                             message={assistantMsg}
                             isLast={isLastExchange && !isStreaming}
@@ -938,62 +980,96 @@ export default function ChatPage() {
               <div ref={messagesEndRef} />
             </div>
           ) : (
-            /* Single-exchange view (latest or pinned) */
-            <div
-              key={viewedIndex ?? "live"}
-              className="w-full px-16 pt-2 pb-24 space-y-6 animate-in fade-in-0 duration-200"
-            >
-              {viewedIndex !== null && (
-                <div className="flex justify-center mb-4">
-                  <Button
-                    variant="secondary"
-                    size="xs"
-                    className="text-xs h-7 gap-1"
-                    onClick={() => {
-                      setViewedIndex(null);
-                      setPinnedIndex(null);
-                    }}
-                  >
-                    {pinnedIndex !== null ? "Unpin and return to latest" : "Return to latest"}
-                  </Button>
-                </div>
-              )}
+            /* Single-exchange view (latest or pinned). */
+            (() => {
+              // Determine which assistant messages supply the current and
+              // previous specs. In live mode, "current" is the latest assistant
+              // and "previous" is the one before it. In history/pinned mode,
+              // "current" is the viewed assistant message (no previous needed).
+              const currentAssistantMsg =
+                viewedIndex !== null
+                  ? (messages[viewedIndex + 1]?.role === "assistant"
+                      ? messages[viewedIndex + 1]
+                      : null)
+                  : messages.find(
+                      (_m, i) =>
+                        i > (lastUserIndexLive ?? -1) &&
+                        messages[i]?.role === "assistant",
+                    ) ?? null;
 
-              {displayedMessages.map((message, index) => {
-                if (message.role === "user") {
-                  const isLast = index === displayedMessages.length - 1;
-                  if (!isLast) return null;
-                  const rawPrompt = extractPromptFromMessage(message);
-                  return (
-                    <OutputBlock key={message.id} rawPrompt={rawPrompt} aiTitle={aiTitles[rawPrompt.trim()]}>
-                      <div className="text-sm text-muted-foreground animate-shimmer">Thinking...</div>
-                    </OutputBlock>
-                  );
-                }
-                const userMsg = displayedMessages[index - 1];
-                const rawPrompt = userMsg && userMsg.role === "user"
-                  ? extractPromptFromMessage(userMsg)
-                  : "";
-                return (
-                  <OutputBlock key={message.id} rawPrompt={rawPrompt} aiTitle={aiTitles[rawPrompt.trim()]}>
-                    <MessageBubble
-                      message={message}
-                      isLast={index === displayedMessages.length - 1}
-                      isStreaming={isStreaming && viewedIndex === null && index === displayedMessages.length - 1}
+              const previousAssistantMsg =
+                viewedIndex === null &&
+                lastUserIndexLive >= 1 &&
+                messages[lastUserIndexLive - 1]?.role === "assistant"
+                  ? messages[lastUserIndexLive - 1]
+                  : null;
+
+              const currentParts = currentAssistantMsg?.parts ?? [];
+              const previousParts = previousAssistantMsg?.parts ?? [];
+
+              const rawPromptMsg = displayedMessages.find(m => m.role === "user");
+              const rawPrompt = rawPromptMsg ? extractPromptFromMessage(rawPromptMsg) : "";
+
+              const assistantMsg = displayedMessages.find(m => m.role === "assistant");
+              const isLastAssistantStreaming =
+                isStreaming && viewedIndex === null && !!assistantMsg;
+
+              return (
+                <div
+                  key={viewedIndex ?? "live"}
+                  className="w-full px-16 pt-2 pb-24 space-y-6 animate-in fade-in-0 duration-300"
+                >
+                  {viewedIndex !== null && (
+                    <div className="flex justify-center mb-4">
+                      <Button
+                        variant="secondary"
+                        size="xs"
+                        className="text-xs h-7 gap-1"
+                        onClick={() => {
+                          setViewedIndex(null);
+                          setPinnedIndex(null);
+                        }}
+                      >
+                        {pinnedIndex !== null ? "Unpin and return to latest" : "Return to latest"}
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Prompt pill */}
+                  <OutputBlock rawPrompt={rawPrompt} aiTitle={aiTitles[rawPrompt.trim()]}>
+                    {/* Persistent spec renderer — never remounts */}
+                    <PersistentSpecView
+                      key="persistent-spec"
+                      currentParts={currentParts}
+                      previousParts={previousParts}
+                      loading={isLastAssistantStreaming}
                     />
+
+                    {/* Text & tool steps below the spec */}
+                    {assistantMsg ? (
+                      <MessageBubble
+                        message={assistantMsg as AppMessage}
+                        isLast
+                        isStreaming={isLastAssistantStreaming}
+                      />
+                    ) : isStreaming ? (
+                      <div className="text-sm text-muted-foreground animate-shimmer">
+                        Thinking...
+                      </div>
+                    ) : null}
                   </OutputBlock>
-                );
-              })}
 
-              {error && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{error.message}</AlertDescription>
-                </Alert>
-              )}
+                  {error && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{error.message}</AlertDescription>
+                    </Alert>
+                  )}
 
-              <div ref={messagesEndRef} />
-            </div>
+                  <div ref={messagesEndRef} />
+                </div>
+              );
+            })()
           )}
         </main>
 
@@ -1006,6 +1082,14 @@ export default function ChatPage() {
             onMouseEnter={() => setInputHovered(true)}
             onMouseLeave={() => setInputHovered(false)}
           >
+            {isStreaming && !inputExpanded && (
+              <div
+                className="absolute inset-0 flex items-center justify-center gap-2 rounded-full bg-card border border-input shadow-sm text-sm text-muted-foreground px-4 pointer-events-none"
+                style={{ borderRadius: "9999px" }}
+              >
+                <span className="animate-shimmer">Thinking...</span>
+              </div>
+            )}
             <Textarea
               ref={inputRef}
               value={input}
@@ -1014,9 +1098,11 @@ export default function ChatPage() {
               onFocus={() => setInputFocused(true)}
               onBlur={() => setInputFocused(false)}
               placeholder={
-                isEmpty
-                  ? "e.g., Compare weather in NYC, London, and Tokyo..."
-                  : "Ask a follow-up..."
+                isStreaming
+                  ? "Thinking..."
+                  : isEmpty
+                    ? "e.g., Compare weather in NYC, London, and Tokyo..."
+                    : "Ask a follow-up..."
               }
               rows={1}
               className={[

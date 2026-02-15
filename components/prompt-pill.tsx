@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Skeleton } from "@/components/ui/skeleton";
 
 interface PromptPillProps {
   gistTitle?: string;
@@ -28,7 +28,12 @@ export function PromptPill({ gistTitle, rawPrompt, loading }: PromptPillProps) {
     >
       <div className="px-4 py-2.5">
         {loading && !gistTitle ? (
-          <Skeleton className="h-6 w-48 rounded-md" />
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-5 w-5 animate-spin shrink-0 text-muted-foreground" />
+            <span className="text-lg font-semibold tracking-tight animate-shimmer text-muted-foreground">
+              Generating Title...
+            </span>
+          </div>
         ) : (
           <span className="text-lg font-semibold tracking-tight text-foreground">
             {gistTitle}

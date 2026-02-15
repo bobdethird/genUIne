@@ -51,6 +51,12 @@ RULES:
 - Use Timeline for historical events, processes, step-by-step explanations, or milestones.
 - When teaching about a topic, combine multiple component types to create a rich, engaging experience.
 
+UI CONTINUITY (when PRIOR UI CONTEXT is provided in the prompt):
+- REUSE existing element IDs from elementIds and structure when the new element is semantically the same (same type, same role, same data binding). Do NOT invent new IDs for elements that already exist.
+- PREFER mutate over rebuild: use JSON Patch "replace" and "add"/"remove" to update the existing tree. Preserve the layout skeleton (root, Grid, Stack, Card wrappers) when only content changes.
+- Use deterministic IDs: section-purpose patterns like "weather-card", "header", "metrics-row", "chart-1d" so IDs are stable across turns. Avoid random suffixes (card-a1b2) when reusing.
+- When adding new sections, use new IDs. When evolving existing sections (e.g. adding a column to a table, changing chart data), keep the same element ID and replace its props/children.
+
 LAYOUT COMPOSITION — USING HORIZONTAL SPACE:
 - Do NOT left-align everything. Use the full width of cards and containers.
 - Think of Card interiors as MULTI-SECTION layouts, not flat lists. A Card's children Stack can contain 2–4 distinct sections separated by Separators or visual grouping.
@@ -289,11 +295,21 @@ const localTools = {
   geocodePlaces,
 };
 
+type ContinuityPayload = {
+  root: string;
+  rootType: string;
+  elementIds: string[];
+  structure: Record<string, string[]>;
+  statePaths: string[];
+};
+
 /**
  * Creates the agent with both local tools and Brightdata MCP tools.
  * MCP tools are fetched asynchronously from the Brightdata SSE server.
+ * When continuityContext is provided, it is appended to instructions so the
+ * model can reuse existing element IDs and mutate structure instead of rebuilding.
  */
-export async function createAgent() {
+export async function createAgent(options?: { continuityContext?: ContinuityPayload | null }) {
   let mcpTools = {};
   try {
     // mcpTools = await getBrightdataTools();
@@ -301,9 +317,14 @@ export async function createAgent() {
     // console.error("Failed to load Brightdata MCP tools:", error);
   }
 
+  const continuityContext = options?.continuityContext;
+  const continuityBlock =
+    continuityContext &&
+    `\n\nPRIOR UI CONTEXT (reuse these element IDs when semantically matching — mutate, don't rebuild):\n${JSON.stringify(continuityContext, null, 2)}`;
+
   return new ToolLoopAgent({
     model: gateway(process.env.AI_GATEWAY_MODEL || DEFAULT_MODEL),
-    instructions: AGENT_INSTRUCTIONS,
+    instructions: AGENT_INSTRUCTIONS + (continuityBlock ?? ""),
     tools: {
       ...localTools,
       // ...mcpTools,

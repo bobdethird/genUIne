@@ -133,7 +133,7 @@ export const { registry, handlers } = defineRegistry(explorerCatalog, {
         }[props.justify ?? "start"] ?? "justify-start";
       return (
         <div
-          className={`flex ${props.direction === "horizontal" ? "flex-row" : "flex-col"} ${gapClass} ${alignClass} ${justifyClass}`}
+          className={`flex transition-[gap,flex-direction] duration-300 ease-in-out ${props.direction === "horizontal" ? "flex-row" : "flex-col"} ${gapClass} ${alignClass} ${justifyClass}`}
         >
           {children}
         </div>
@@ -152,7 +152,7 @@ export const { registry, handlers } = defineRegistry(explorerCatalog, {
         }[props.maxWidth ?? "full"] ?? "max-w-full";
       const centeredClass = props.centered ? "mx-auto" : "";
       return (
-        <Card className={`${maxWidthClass} ${centeredClass} w-full`}>
+        <Card className={`${maxWidthClass} ${centeredClass} w-full transition-[gap,min-height,opacity] duration-300 ease-in-out`}>
           {(props.title || props.description) && (
             <CardHeader>
               {props.title && <CardTitle>{props.title}</CardTitle>}
@@ -176,7 +176,11 @@ export const { registry, handlers } = defineRegistry(explorerCatalog, {
         }[props.columns ?? "3"] ?? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3";
       const gapClass =
         { sm: "gap-2", md: "gap-4", lg: "gap-6" }[props.gap ?? "md"] ?? "gap-4";
-      return <div className={`grid ${colsClass} ${gapClass}`}>{children}</div>;
+      return (
+        <div className={`grid transition-[gap,grid-template-columns] duration-300 ease-in-out ${colsClass} ${gapClass}`}>
+          {children}
+        </div>
+      );
     },
 
     Heading: ({ props }) => {

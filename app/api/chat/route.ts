@@ -12,6 +12,7 @@ export const maxDuration = 120;
 export async function POST(req: Request) {
   const body = await req.json();
   const uiMessages: UIMessage[] = body.messages;
+  const continuityContext = body.continuityContext ?? null;
 
   if (!uiMessages || !Array.isArray(uiMessages) || uiMessages.length === 0) {
     return new Response(
@@ -23,7 +24,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const agent = await createAgent();
+  const agent = await createAgent({ continuityContext });
   const modelMessages = await convertToModelMessages(uiMessages);
   const result = await agent.stream({ messages: modelMessages });
 
