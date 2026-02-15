@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -108,8 +109,14 @@ export function LightboxProvider({ children }: { children: ReactNode }) {
 
   const getOrder = useCallback(() => orderCounter.current++, []);
 
+  // Memoize so consumers don't re-render when unrelated LightboxProvider state changes
+  const ctxValue = useMemo(
+    () => ({ register, unregister, open }),
+    [register, unregister, open],
+  );
+
   return (
-    <LightboxContext.Provider value={{ register, unregister, open }}>
+    <LightboxContext.Provider value={ctxValue}>
       <OrderContext.Provider value={getOrder}>
         {children}
       </OrderContext.Provider>
