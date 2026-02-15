@@ -10,7 +10,7 @@ import { z } from "zod";
  */
 export const geocodePlaces = tool({
   description:
-    "Look up geographic coordinates (latitude/longitude) for one or more places, addresses, or business names. ALWAYS use this before creating Map markers to get accurate coordinates instead of guessing. Supports batch lookups of up to 10 places. Optionally provide a proximity coordinate to bias results toward a specific area (e.g. if the user asked about restaurants in San Francisco, pass SF's coordinates as proximity).",
+    "Look up geographic coordinates (latitude/longitude) for specific places. Call this AFTER you have identified the exact place names or addresses (e.g. from webSearch or user input), and BEFORE generating a Map component. Pass the real place names/addresses as queries — the returned latitude and longitude MUST be used on every Map marker. Supports batch lookups of up to 10 places. Optionally provide proximity coordinates to bias results toward a specific area.",
   inputSchema: z.object({
     queries: z
       .array(z.string())

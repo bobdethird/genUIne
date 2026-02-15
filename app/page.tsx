@@ -1086,20 +1086,22 @@ export default function ChatPage() {
           >
             <Textarea
               ref={inputRef}
-              value={isStreaming && !input ? "     Thinking..." : input}
+              value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               onFocus={() => setInputFocused(true)}
               onBlur={() => setInputFocused(false)}
               placeholder={
-                isEmpty
-                  ? "e.g., Compare weather in NYC, London, and Tokyo..."
-                  : "Ask a follow-up..."
+                isStreaming && !input
+                  ? "     Thinking..."
+                  : isEmpty
+                    ? "e.g., Compare weather in NYC, London, and Tokyo..."
+                    : "Ask a follow-up..."
               }
               rows={1}
               className={[
                 "resize-none shadow-sm focus-visible:ring-0 focus-visible:border-input min-h-0 transition-all duration-300 ease-in-out",
-                isStreaming && !input ? "bg-background" : "bg-card",
+                isStreaming && !input ? "bg-background text-muted-foreground" : "bg-card",
                 inputExpanded ? "cursor-text" : "cursor-default caret-transparent",
                 inputExpanded ? "text-lg" : "text-sm",
                 isStreaming && !input && "animate-shimmer",
