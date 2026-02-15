@@ -32,23 +32,13 @@ export function startSwarm(sessionId: string, query: string) {
     history.push(newMessage);
     sessionHistories.set(sessionId, history);
 
-    // 3. Start Execution (Fire & Forget)
-    (async () => {
+    // 3. Start Execution
+    // Return the promise so the caller can wait if they want (POC mode)
+    const executionPromise = (async () => {
         try {
             // We pass the FULL history + new message to the graph
-            // Since we're not using a real checkpointer, we simulate state by passing all messages.
-            // The graph's 'messages' annotation is append-only reducer, so passing a big list *might* duplicate
-            // if we re-used a checkpointer. But here we are effectively "restarting" the graph with full context.
-            // CAUTION: Tooloutputs from previous runs aren't in 'history' unless we captured them.
-            // For this simpler version, we just pass the NEW message, but we lose context of previous tool calls 
-            // unless we store them too.
-
-            // BETTER HACK: Just pass the new message? 
-            // If the graph is stateless, it won't know previous context.
-            // Let's pass the full history.
-
             const inputs = {
-                messages: [newMessage], // Passing just new message for now to avoid huge payload duplication in this stateless run
+                messages: [newMessage],
                 sessionId: sessionId,
             };
 
@@ -59,7 +49,7 @@ export function startSwarm(sessionId: string, query: string) {
             const config = { configurable: { thread_id: sessionId, sessionId: sessionId } };
 
             // Execute
-            const result = await swarmGraph.invoke(inputs, config);
+            await swarmGraph.invoke(inputs, config);
 
             setSwarmStatus(sessionId, "completed");
             appendSwarmLog(sessionId, "Swarm execution step completed.");
@@ -71,5 +61,5 @@ export function startSwarm(sessionId: string, query: string) {
         }
     })();
 
-    return { sessionId, status: "started" };
+    return { sessionId, status: "started", executionPromise };
 }

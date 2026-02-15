@@ -8,7 +8,8 @@ import {
 } from "ai";
 import { pipeJsonRender } from "@json-render/core";
 
-export const maxDuration = 60;
+// Increase timeout for full stall
+export const maxDuration = 300; // 5 minutes
 
 export async function POST(req: Request) {
   const body = await req.json();
@@ -62,15 +63,25 @@ export async function POST(req: Request) {
 
   console.log(`[Route] Extracted Query: "${query}"`);
 
-  // Fire-and-forget start
+  // FULL STALL MODE: Trigger Swarm and WAIT for completion
   if (query) {
-    console.log(`[Route] Triggering Swarm for ${sessionId}: ${query.slice(0, 50)}...`);
-    // Wrap in try-catch to ensure no error here blocks the main thread
+    console.log(`[Route] Triggering Swarm for ${sessionId} and WAITING for completion...`);
     try {
-      startSwarm(sessionId, query as string);
-      console.log(`[Route] startSwarm called successfully.`);
+      // Deconstruct the execution promise from the runner
+      // explicit cast to any as the runner was updated in a separate turn
+      const swarmResult = startSwarm(sessionId, query as string) as any;
+      const executionPromise = swarmResult.executionPromise;
+
+      if (executionPromise) {
+        console.log(`[Route] Execution promise found. Awaiting...`);
+        await executionPromise;
+        console.log(`[Route] Swarm finished execution. Proceeding to UI Agent.`);
+      } else {
+        console.warn(`[Route] Swarm started but no execution promise returned.`);
+      }
+
     } catch (e) {
-      console.error(`[Route] FAILED to start swarm:`, e);
+      console.error(`[Route] FAILED to run swarm:`, e);
     }
   } else {
     console.warn(`[Route] No user query found, skipping swarm trigger.`);
